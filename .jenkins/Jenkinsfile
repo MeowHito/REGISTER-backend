@@ -1,0 +1,129 @@
+// ===== Global Variables =====
+def REGISTRY_URL = env.GLOBAL_REGISTRY_URL // Jenkins environment variable for Docker registry URL
+def REGISTRY_CREDS = env.GLOBAL_REGISTRY_CREDS // Jenkins credentials ID for Docker registry (format: "registry-url:credentials-id")
+def IMAGE_NAME = ''
+def IMAGE_TAG  = ''
+def FULL_IMAGE = ''
+def IS_TAG     = false
+def SOURCE     = ''
+def SHOULD_BUILD = true
+
+pipeline {
+
+    agent any
+
+    options {
+        timestamps()
+    }
+
+    stages {
+
+        // ===== 1. Resolve Context =====
+        stage('Resolve Context') {
+            steps {
+                script {
+
+                    IS_TAG = (env.TAG_NAME != null)
+                    def shortCommit = env.GIT_COMMIT.take(7)
+                    def branchName = env.BRANCH_NAME ?: ''
+                    def jobNameParts = (env.JOB_NAME ?: '').tokenize('/')
+
+                    IMAGE_NAME = (jobNameParts.size() > 1 ? jobNameParts[-2] : jobNameParts[-1])
+                        .toLowerCase()
+                        .replaceAll('[^a-z0-9]+', '-')
+
+                    if (IS_TAG) {
+                        IMAGE_TAG = env.TAG_NAME
+                        SOURCE    = 'tag'
+                    } else if (branchName == 'develop') {
+                        IMAGE_TAG = "build-${env.BUILD_NUMBER}-${shortCommit}"
+                        SOURCE    = 'develop'
+                    } else if (branchName.startsWith('release/')) {
+                        IMAGE_TAG = "release-${branchName.replaceFirst('release/', '')}"
+                        SOURCE    = 'release'
+                    } else {
+                        SHOULD_BUILD = false
+                        SOURCE       = 'ignored-branch'
+
+                        echo "Skipping pipeline for unsupported branch: ${branchName}"
+                        currentBuild.displayName = "#skip-${branchName}"
+                        currentBuild.result = 'NOT_BUILT'
+                        return
+                    }
+
+                    FULL_IMAGE = "${IMAGE_NAME}:${IMAGE_TAG}"
+
+                    echo """
+                    ===== Build Context =====
+                    SOURCE       = ${SOURCE}
+                    BRANCH_NAME  = ${branchName}
+                    BUILD_NUMBER = ${env.BUILD_NUMBER}
+                    GIT_COMMIT   = ${env.GIT_COMMIT}
+                    SHORT_COMMIT = ${shortCommit}                    
+                    IMAGE        = ${FULL_IMAGE}
+                    =========================
+                    """
+
+                    currentBuild.displayName = "#${IMAGE_TAG}"
+                }
+            }
+        }
+
+        // ===== 2. Docker Build =====
+        stage('Docker Build') {
+            when {
+                expression {
+                    SHOULD_BUILD
+                }
+            }
+            steps {
+                script {
+                    docker.build(FULL_IMAGE)
+                }
+            }
+        }
+
+        // ===== 3. Docker Push =====
+        stage('Docker Push') {
+            when {
+                expression {
+                    SHOULD_BUILD
+                }
+            }
+            steps {
+                script {
+                    docker.withRegistry(
+                        REGISTRY_URL,
+                        REGISTRY_CREDS
+                    ) {
+                        def img = docker.image(FULL_IMAGE)
+
+                        img.push()          // push tag version
+                        img.push('latest')  // optional
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Pipeline success: ${FULL_IMAGE}"
+        }
+        notBuilt {
+            echo "Pipeline skipped: unsupported branch"
+        }
+        failure {
+            echo "❌ Pipeline failed"
+        }
+        always {
+            //sh 'docker image prune -f || true'
+            sh """
+                docker image prune -f || true
+                if [ -n \"${FULL_IMAGE}\" ]; then
+                    docker rmi ${FULL_IMAGE} || true
+                fi
+            """
+        }
+    }
+}

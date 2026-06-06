@@ -1,0 +1,154 @@
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  mail:
+    host: ${SMTP_HOST:smtp.gmail.com}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USER}
+    password: ${SMTP_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          ssl:
+            protocols: TLSv1.2
+            ciphers: TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+
+  rabbitmq:
+    host: ${RMQ_HOST}
+    port: ${RMQ_PORT:5672}
+    username: ${RMQ_USER}
+    password: ${RMQ_PASSWORD}
+    queue:
+      email: ${RMQ_QUEUE_EMAIL:emailQueue}
+      simple-email: ${RMQ_QUEUE_SIMPLE_EMAIL:simpleEmailQueue}
+
+  redis:
+    host: ${REDIS_HOST}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD}
+    timeout: 3000ms
+    lettuce:
+      pool:
+        max-active: 50
+        max-idle: 10
+        min-idle: 5
+
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:none}
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+        implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+
+  servlet:
+    multipart:
+      max-file-size: ${MAX_FILE_SIZE:20MB}
+      max-request-size: ${MAX_REQUEST_SIZE:20MB}
+
+  # Quartz Scheduler Configuration
+  quartz:
+    job-store-type: jdbc
+    jdbc:
+      initialize-schema: never
+    properties:
+      org:
+        quartz:
+          scheduler:
+            instanceName: ActionMembershipScheduler
+            instanceId: AUTO
+          jobStore:
+            class: org.springframework.scheduling.quartz.LocalDataSourceJobStore
+            driverDelegateClass: org.quartz.impl.jdbcjobstore.StdJDBCDelegate
+            tablePrefix: QRTZ_
+            isClustered: true
+            clusterCheckinInterval: 20000
+          threadPool:
+            class: org.quartz.simpl.SimpleThreadPool
+            threadCount: 10
+            threadPriority: 5
+            threadsInheritContextClassLoaderOfInitializingThread: true
+
+app:
+  announcement-mail-target: ${APP_CONTACT_EMAIL}
+  contact-mail-target: ${APP_CONTACT_EMAIL}
+  support-mail-cc: ${APP_CONTACT_EMAIL}
+  seed-user-password: ${SEED_USER_PASSWORD}
+  report-path: ${APP_REPORT_PATH:/com/actionth/membership/report}
+  env: ${APP_ENV:UAT}
+  fe-url: ${APP_FE_URL:http://localhost:3000}
+  be-url: ${APP_BE_URL:http://localhost:8080}
+  email-logo-url: ${APP_EMAIL_LOGO_URL:${app.fe-url}/assets/images/logoB.png}
+  email:
+    daily-limit: ${APP_EMAIL_DAILY_LIMIT:500}   # global limit for ALL system emails
+    test-allowlist: ${EMAIL_TEST_ALLOWLIST:}   # comma-separated emails allowed in non-PROD (empty = block all)
+
+email-queue:
+  daily-limit: ${EMAIL_QUEUE_DAILY_LIMIT:50}    # sub-limit for queue (CORRECTION + RETRY) only
+
+aws:
+  s3:
+    accessKey: ${AWS_S3_ACCESS_KEY}
+    secretKey: ${AWS_S3_SECRET_KEY}
+    bucketName: ${AWS_S3_BUCKET_NAME}
+    rootPath: ${AWS_S3_ROOT_PATH:action_membership/}
+
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:false}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}
+
+login:
+  auth:
+    line:
+      client-id: ${AUTH_LINE_CLIENT_ID}
+      client-secret: ${AUTH_LINE_CLIENT_SECRET}
+      verify-url: https://api.line.me/oauth2/v2.1/verify
+    google:
+      client-id: ${AUTH_GOOGLE_CLIENT_ID}
+      client-secret: ${AUTH_GOOGLE_CLIENT_SECRET}
+      token-url: https://oauth2.googleapis.com/token
+      redirect-uri: ${AUTH_GOOGLE_REDIRECT_URL}
+    facebook:
+      client-id: ${AUTH_FB_CLIENT_ID}
+      client-secret: ${AUTH_FB_CLIENT_SECRET}
+      debug-url: https://graph.facebook.com/debug_token
+      verify-url: https://graph.facebook.com/me
+
+server:
+  port: 8080
+
+scb:
+  app-key: ${SCB_APP_KEY}
+  app-secret: ${SCB_APP_SECRET}
+  base-url: ${SCB_BASE_URL}
+  company-id: ${SCB_COMPANY_ID}
+  terminal-id: ${SCB_TERMINAL_ID}
+  pp-id: ${SCB_PP_ID}
+  ref3: ${SCB_REF3:SCB}
+
+2c2p:
+  merchant-id: ${MERCHANT_ID_2C2P}
+  merchant-id-ewallet: ${MERCHANT_ID_2C2P_EWALLET}
+  secret-key: ${PAYMENT_KEY_2C2P}
+  inquiry-url: ${INQUIRY_URL_2C2P}
+  token-url: ${TOKEN_URL_2C2P}
+  frontend-return-url: ${app.fe-url}/.netlify/functions/return-2c2p
+  backend-return-url: ${app.be-url}/api/webhook/partner-2c2p
+
+jwt:
+  secret-key: ${JWT_SECRET_KEY}
+
+participant-token:
+  secret-key: ${PARTICIPANT_TOKEN_SECRET}

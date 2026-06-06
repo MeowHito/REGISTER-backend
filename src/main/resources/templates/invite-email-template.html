@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="th" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>คำเชิญเข้าร่วมทีมจัดการกิจกรรม</title>
+</head>
+<body style="font-family: 'Inter', 'Segoe UI', Arial, sans-serif; background-color: #f8fafc; padding: 40px 20px; margin: 0;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto;">
+        <!-- Logo centered above card -->
+        <tr>
+            <td style="text-align: center; padding: 28px 0;">
+                <img th:src="${logoUrl}" alt="Action in Thai" width="140" style="display: inline-block; height: auto;" />
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px -4px rgba(30, 41, 59, 0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 50%, rgba(51, 122, 183, 0.15) 100%); padding: 0;">
+                            <div style="height: 4px; background: linear-gradient(90deg, #337ab7 0%, #4a90d9 50%, #5ba3f5 100%);"></div>
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="padding: 40px 40px 30px 40px;">
+                                        <table width="100%" cellpadding="0" cellspacing="0">
+                                            <tr>
+                                                <td>
+                                                    <h1 style="margin: 0; font-size: 28px; font-weight: 800; color: #ffffff; line-height: 1.2; letter-spacing: -0.02em;">คุณได้รับเชิญเข้าร่วมทีม</h1>
+                                                    <p style="margin: 8px 0 0 0; font-size: 16px; color: rgba(255,255,255,0.6);">Event Team Invitation</p>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 40px;">
+                            <p style="margin: 0 0 24px 0; font-size: 16px; color: #475569; line-height: 1.6;">สวัสดีค่ะ,</p>
+
+                            <p style="margin: 0 0 24px 0; font-size: 15px; line-height: 1.7; color: #64748b;">
+                                <strong style="color: #1e293b;" th:text="${inviterName} ?: 'ผู้ดูแลระบบ'">Inviter Name</strong>
+                                ได้เชิญคุณเข้าร่วมทีมจัดการกิจกรรม
+                            </p>
+
+                            <!-- Event Info Card -->
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border-radius: 12px; overflow: hidden; margin-bottom: 24px;">
+                                <tr>
+                                    <td style="width: 4px; background: linear-gradient(180deg, #337ab7 0%, #5ba3f5 100%);"></td>
+                                    <td style="padding: 24px;">
+                                        <div style="margin-bottom: 20px;">
+                                            <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">กิจกรรม / EVENT</p>
+                                            <p style="margin: 0; font-size: 20px; font-weight: 700; color: #1e293b;" th:text="${eventName} ?: '-'">Event Name</p>
+                                        </div>
+                                        <div style="height: 1px; background-color: #e2e8f0; margin: 0 0 20px 0;"></div>
+                                        <table width="100%" cellpadding="0" cellspacing="0">
+                                            <tr>
+                                                <td style="width: 50%; vertical-align: top;">
+                                                    <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">สิทธิ์ที่ได้รับ / ROLE</p>
+                                                    <!--/* Viewer */-->
+                                                    <th:block th:if="${role == 'viewer'}">
+                                                        <table cellpadding="0" cellspacing="0">
+                                                            <tr>
+                                                                <td style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 20px; padding: 4px 14px;">
+                                                                    <span style="font-size: 14px; font-weight: 600; color: #2563eb;">👁 ผู้ดู (Viewer)</span>
+                                                                </td>
+                                                            </tr>
+                                                        </table>
+                                                    </th:block>
+                                                    <!--/* Editor */-->
+                                                    <th:block th:if="${role == 'editor'}">
+                                                        <table cellpadding="0" cellspacing="0">
+                                                            <tr>
+                                                                <td style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 20px; padding: 4px 14px;">
+                                                                    <span style="font-size: 14px; font-weight: 600; color: #16a34a;">✏️ ผู้แก้ไข (Editor)</span>
+                                                                </td>
+                                                            </tr>
+                                                        </table>
+                                                    </th:block>
+                                                    <!--/* Admin */-->
+                                                    <th:block th:if="${role == 'admin'}">
+                                                        <table cellpadding="0" cellspacing="0">
+                                                            <tr>
+                                                                <td style="background-color: #fdf4ff; border: 1px solid #e9d5ff; border-radius: 20px; padding: 4px 14px;">
+                                                                    <span style="font-size: 14px; font-weight: 600; color: #9333ea;">🛡 ผู้ดูแล (Admin)</span>
+                                                                </td>
+                                                            </tr>
+                                                        </table>
+                                                    </th:block>
+                                                </td>
+                                                <td style="width: 50%; vertical-align: top;">
+                                                    <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">เชิญโดย / INVITED BY</p>
+                                                    <p style="margin: 0; font-size: 14px; font-weight: 500; color: #334155;" th:text="${inviterName} ?: '-'">Inviter Name</p>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Permission Explanation -->
+                            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 32px;">
+                                <tr>
+                                    <td style="padding: 16px 20px; background-color: #fefce8; border-radius: 10px; border: 1px solid #fef08a;">
+                                        <p style="margin: 0 0 4px 0; font-size: 13px; font-weight: 600; color: #a16207;">💡 สิทธิ์ของคุณ</p>
+                                        <th:block th:if="${role == 'viewer'}">
+                                            <p style="margin: 0; font-size: 13px; color: #a16207; line-height: 1.5;">คุณสามารถ<strong>ดูข้อมูล</strong>กิจกรรมได้ แต่ไม่สามารถแก้ไขหรือลบข้อมูลได้</p>
+                                        </th:block>
+                                        <th:block th:if="${role == 'editor'}">
+                                            <p style="margin: 0; font-size: 13px; color: #a16207; line-height: 1.5;">คุณสามารถ<strong>ดูและแก้ไขข้อมูล</strong>กิจกรรมได้</p>
+                                        </th:block>
+                                        <th:block th:if="${role == 'admin'}">
+                                            <p style="margin: 0; font-size: 13px; color: #a16207; line-height: 1.5;">คุณสามารถ<strong>ดูและแก้ไขข้อมูล</strong>กิจกรรมได้ รวมถึง<strong>จัดการสมาชิก</strong>ในทีม</p>
+                                        </th:block>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- CTA Button -->
+                            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 32px;">
+                                <tr>
+                                    <td align="center">
+                                        <table cellpadding="0" cellspacing="0">
+                                            <tr>
+                                                <td style="border-radius: 12px; background: linear-gradient(135deg, #337ab7 0%, #4a90d9 100%); box-shadow: 0 4px 14px -3px rgba(51, 122, 183, 0.45);">
+                                                    <a th:href="${acceptUrl}" href="#" target="_blank" style="display: inline-block; padding: 16px 48px; font-size: 16px; font-weight: 700; color: #ffffff; text-decoration: none; letter-spacing: 0.02em;">
+                                                        ยอมรับคำเชิญ
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Expiry Notice -->
+                            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 16px;">
+                                <tr>
+                                    <td align="center">
+                                        <p style="margin: 0; font-size: 13px; color: #94a3b8;">
+                                            ⏰ คำเชิญนี้จะหมดอายุใน <strong style="color: #64748b;">7 วัน</strong>
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Fallback Link -->
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="padding: 16px; background-color: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+                                        <p style="margin: 0 0 6px 0; font-size: 12px; color: #94a3b8;">หากปุ่มด้านบนไม่ทำงาน กรุณาคัดลอกลิงก์นี้ไปวางในเบราว์เซอร์:</p>
+                                        <p style="margin: 0; font-size: 12px; color: #337ab7; word-break: break-all;" th:text="${acceptUrl}">https://app.example.com/invite/accept?token=xxx</p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f1f5f9; padding: 24px 40px; border-top: 1px solid #e2e8f0;">
+                            <p style="margin: 0 0 2px 0; font-size: 13px; color: #888888;">ขอแสดงความนับถือ,</p>
+                            <p style="margin: 0; font-size: 14px; font-weight: 700; color: #1a1a2e;">Action in Thai</p>
+                        </td>
+                    </tr>
+
+                </table>
+            </td>
+        </tr>
+        <!-- Copyright -->
+        <tr>
+            <td style="text-align: center; padding: 20px 0 0 0;">
+                <p style="margin: 0; font-size: 11px; color: #94a3b8;">&copy; 2023 Action in Thai. All Rights Reserved.</p>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

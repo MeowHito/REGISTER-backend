@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title>ขอบคุณที่ชำระรายการสมัคร</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 1.5cm;
+            @bottom-right {
+                content: "Page " counter(page) " of " counter(pages);
+                font-family: 'TH Sarabun New', sans-serif;
+                font-size: 10pt;
+            }
+        }
+
+        body {
+            font-family: 'TH Sarabun New', Arial, sans-serif;
+            font-size: 16pt;
+            color: #333;
+            line-height: 1.2;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            width: 100%;
+        }
+
+        h2, h3 {
+            margin-top: 5px;
+            margin-bottom: 10px;
+        }
+
+        p {
+            margin: 3px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            /* Allow table to split across pages if absolutely necessary, but rows should try to stay together */
+            page-break-inside: auto;
+        }
+        
+        tr {
+            page-break-inside: avoid;
+            page-break-after: auto;
+        }
+
+        th {
+            background-color: #e3f2fd;
+            color: #0d47a1;
+            padding: 8px;
+            border: 1px solid #90caf9;
+            text-align: left;
+        }
+
+        td {
+            padding: 6px 8px;
+            border: 1px solid #e0e0e0;
+            vertical-align: top;
+        }
+
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .bold { font-weight: bold; }
+        .text-blue { color: #0d47a1; }
+        .text-red { color: #c62828; }
+        .bg-gray { background-color: #f9f9f9; }
+        .bg-light-blue { background-color: #bbdefb; }
+        
+        .header-section {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .info-table td {
+            border: none;
+            padding: 2px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header-section">
+            <h2 class="text-blue">ใบเสร็จค่าสมัครเข้าร่วมแข่งขันวิ่ง</h2>
+            <p>บริษัท แอคชั่น อินไทย จำกัด</p>
+        </div>
+
+        <div style="margin-bottom: 20px; border-bottom: 1px solid #ddd; padding-bottom: 10px;">
+            <table class="info-table">
+                <tr>
+                    <td style="width: 60%;">
+                         <p><strong>เลขที่ใบเสร็จ:</strong> <span th:text="${transactionId}">Transaction ID</span></p>
+                         <p><strong>เลขอ้างอิง:</strong> <span th:text="${refNo}">Ref No</span></p>
+                    </td>
+                    <td style="width: 40%; text-align: right;">
+                        <p><strong>วันที่ชำระ:</strong> <span th:text="${dateRegister}">Date</span> <span th:if="${dateRegister != null}" style="color: #666;">(UTC+7)</span></p>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <div style="margin-bottom: 15px;">
+            <h3 class="text-blue" style="font-size: 14pt;">ข้อมูลการสมัคร</h3>
+            <p>
+                <strong style="color:#555;">กิจกรรม:</strong> <span th:text="${eventName != null ? eventName : '-'}">Event Name</span>
+            </p>
+        </div>
+
+        <table>
+            <thead>
+                <tr class="text-blue" style="background-color: #e3f2fd;">
+                    <th>รายการ</th>
+                    <th class="text-right" style="width: 25%;">จำนวนเงิน (บาท)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Loop Applicants -->
+                <!-- Use th:block to group rows for each applicant, but render rows directly -->
+                <th:block th:each="app : ${applicants}">
+                    <!-- Main Runner Row -->
+                    <tr>
+                        <td style="border-bottom: none;">
+                            <div>
+                                <strong th:text="${(app.firstName != null ? app.firstName : '') + ' ' + (app.lastName != null ? app.lastName : '')}">Name</strong>
+                            </div>
+                            <div style="font-size: 0.9em; color: #555;">
+                                <span th:text="'ประเภท: ' + (${app.eventTypeName} ?: '-')">Type</span>
+                                <span th:if="${app.teamClub != null and app.teamClub != ''}" th:text="' | ชมรม/ทีม: ' + ${app.teamClub}"></span>
+                                <span th:text="' | ' + ${app.ageGroupName}"></span>
+                                <span th:if="${app.shirtSizeName != null}" th:text="' | เสื้อ: ' + ${app.shirtSizeName}"></span>
+                                <span th:if="${app.deliveryMethod != null}" th:text="' | รับ: ' + ${app.deliveryMethod}"></span>
+                            </div>
+                        </td>
+                        <td class="text-right" style="border-bottom: none;">
+                            <span th:text="${#numbers.formatDecimal(app.price != null ? app.price : 0, 1, 'COMMA', 2, 'POINT')}">0.00</span>
+                        </td>
+                    </tr>
+                    
+                    <!-- Separate Line for Discount (No Shirt) if applicable -->
+                    <tr th:if="${app.discountNoShirt != null and app.discountNoShirt > 0}">
+                        <td style="border-top: none; border-bottom: none; padding-top: 0; padding-left: 20px; color: #666; font-size: 0.9em;">
+                            - ส่วนลด (ไม่รับเสื้อ)
+                        </td>
+                        <td class="text-right text-red" style="border-top: none; border-bottom: none; padding-top: 0; font-size: 0.9em;">
+                            -<span th:text="${#numbers.formatDecimal(app.discountNoShirt, 1, 'COMMA', 2, 'POINT')}">0.00</span>
+                        </td>
+                    </tr>
+
+                    <!-- Separate Line for Personal Coupon Discount if applicable -->
+                    <tr th:if="${app.personalCouponDiscount != null and app.personalCouponDiscount > 0}">
+                        <td style="border-top: none; border-bottom: none; padding-top: 0; padding-left: 20px; color: #666; font-size: 0.9em;">
+                            - ส่วนลดคูปอง
+                        </td>
+                        <td class="text-right text-red" style="border-top: none; border-bottom: none; padding-top: 0; font-size: 0.9em;">
+                            -<span th:text="${#numbers.formatDecimal(app.personalCouponDiscount, 1, 'COMMA', 2, 'POINT')}">0.00</span>
+                        </td>
+                    </tr>
+                    
+                    <!-- Separate Line for Shipping Fee if applicable (per person logic, usually shipping is total) -->
+                     <tr th:if="${app.shippingFee != null and app.shippingFee > 0}">
+                        <td style="border-top: none; padding-top: 0; padding-left: 20px; color: #666; font-size: 0.9em;">
+                            + ค่าจัดส่ง
+                        </td>
+                        <td class="text-right" style="border-top: none; padding-top: 0; font-size: 0.9em;">
+                            <span th:text="${#numbers.formatDecimal(app.shippingFee, 1, 'COMMA', 2, 'POINT')}">0.00</span>
+                        </td>
+                    </tr>
+                </th:block>
+                
+                <!-- Spacer Row to visually separate items from totals -->
+                <tr>
+                    <td colspan="2" style="border: none; height: 10px;"></td>
+                </tr>
+
+                <!-- Subtotal (Net Price before Fee) -->
+                <tr class="bg-gray bold">
+                    <td class="text-right">รวมเงิน</td>
+                    <td class="text-right">
+                        <span th:text="${#numbers.formatDecimal(totalPrice != null ? totalPrice : 0, 1, 'COMMA', 2, 'POINT')}">0.00</span>
+                    </td>
+                </tr>
+
+                <!-- Payment Fee -->
+                <tr th:if="${feeAmount != null and feeAmount > 0}">
+                    <td>ค่าธรรมเนียม (<span th:text="${feePercent} ?: 0">0</span>%)</td>
+                    <td class="text-right">
+                        <span th:text="${#numbers.formatDecimal(feeAmount, 1, 'COMMA', 2, 'POINT')}">0.00</span>
+                    </td>
+                </tr>
+
+                <!-- Grand Total -->
+                <tr class="bg-light-blue bold" style="font-size: 1.1em;">
+                    <td style="border: 1px solid #90caf9;">ยอดชำระสุทธิ</td>
+                    <td class="text-right text-blue" style="border: 1px solid #90caf9;">
+                        <span th:text="${#numbers.formatDecimal(totalAmountWithFee != null ? totalAmountWithFee : 0, 1, 'COMMA', 2, 'POINT')}">0.00</span>
+                    </td>
+                </tr>
+                
+                <tr>
+                    <td colspan="2" class="text-right text-blue" style="font-style: italic; border: none; padding-top: 5px;">
+                        (<span th:text="${thaiBahtText} ?: ''">Thai Baht Text</span>)
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div style="font-size: 11pt; color: #37474f;">
+            <p>กรุณาแสดงใบเสร็จนี้หน้าจุดลงทะเบียน</p>
+            <p>หากมีข้อสงสัยเพิ่มเติม กรุณาติดต่อ: <u>action.in.th@gmail.com</u></p>
+            <p>
+                ขอบคุณที่ร่วมเป็นส่วนหนึ่งของกิจกรรม <strong><span th:text="${eventName != null ? eventName : '—'}">Event Name</span></strong>
+                <br />
+                ขอให้คุณมีความสุขกับการวิ่ง!
+            </p>
+        </div>
+    </div>
+</body>
+</html>

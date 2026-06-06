@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="th" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>เราได้รับข้อความของคุณแล้ว</title>
+</head>
+<body style="font-family: 'Inter', 'Segoe UI', Arial, sans-serif; background-color: #f8fafc; padding: 40px 20px; margin: 0;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto;">
+        <!-- Logo centered above card -->
+        <tr>
+            <td style="text-align: center; padding: 28px 0;">
+                <img th:src="${logoUrl}" alt="Action in Thai" width="140" style="display: inline-block; height: auto;" />
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px -4px rgba(30, 41, 59, 0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 50%, rgba(51, 122, 183, 0.15) 100%); padding: 0;">
+                            <div style="height: 4px; background: linear-gradient(90deg, #337ab7 0%, #4a90d9 50%, #5ba3f5 100%);"></div>
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="padding: 40px 40px 30px 40px;">
+                                        <table width="100%" cellpadding="0" cellspacing="0">
+                                            <tr>
+                                                <td>
+                                                    <h1 style="margin: 0; font-size: 32px; font-weight: 800; color: #ffffff; line-height: 1.2; letter-spacing: -0.02em;">ได้รับข้อความแล้ว</h1>
+                                                    <p style="margin: 8px 0 0 0; font-size: 16px; color: rgba(255,255,255,0.6);">We've Received Your Message</p>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 40px;">
+                            <!-- Success Message -->
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-radius: 12px; margin-bottom: 24px;">
+                                <tr>
+                                    <td style="padding: 24px; text-align: center;">
+                                        <div style="width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, #10b981 0%, #34d399 100%); margin: 0 auto 16px; text-align: center; line-height: 56px;">
+                                            <span style="font-size: 32px;">✓</span>
+                                        </div>
+                                        <h2 style="margin: 0 0 8px 0; font-size: 20px; font-weight: 700; color: #065f46;">ขอบคุณที่ติดต่อเรา!</h2>
+                                        <p style="margin: 0; font-size: 14px; color: #047857;">เราได้รับข้อความของคุณเรียบร้อยแล้ว</p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="margin: 0 0 24px 0; font-size: 18px; line-height: 1.6; color: #1e293b; text-align: center;">
+                                สวัสดี <strong th:text="${name} ?: 'คุณลูกค้า'">คุณลูกค้า</strong>,
+                            </p>
+
+                            <p style="margin: 0 0 32px 0; font-size: 15px; line-height: 1.7; color: #64748b; text-align: center;">
+                                ทีมงานของเราจะตรวจสอบข้อความและติดต่อกลับไปหาคุณ<br/>เร็วที่สุดเท่าที่จะทำได้
+                            </p>
+
+                            <!-- Contact Info -->
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border-radius: 12px; margin-top: 32px;">
+                                <tr>
+                                    <td style="width: 4px; background: linear-gradient(180deg, #337ab7 0%, #5ba3f5 100%);"></td>
+                                    <td style="padding: 24px; text-align: center;">
+                                        <p style="margin: 0 0 8px 0; font-size: 14px; color: #64748b;">มีคำถามเพิ่มเติม?</p>
+                                        <p style="margin: 0; font-size: 15px; color: #337ab7; font-weight: 600;">
+                                            <a href="mailto:action.in.th@gmail.com" style="color: #337ab7; text-decoration: none;">action.in.th@gmail.com</a>
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f1f5f9; padding: 24px 40px; border-top: 1px solid #e2e8f0;">
+                            <p style="margin: 0 0 2px 0; font-size: 13px; color: #888888;">ขอแสดงความนับถือ,</p>
+                            <p style="margin: 0; font-size: 14px; font-weight: 700; color: #1a1a2e;">Action in Thai</p>
+                        </td>
+                    </tr>
+
+                </table>
+            </td>
+        </tr>
+        <!-- Copyright -->
+        <tr>
+            <td style="text-align: center; padding: 20px 0 0 0;">
+                <p style="margin: 0; font-size: 11px; color: #94a3b8;">&copy; 2023 Action in Thai. All Rights Reserved.</p>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

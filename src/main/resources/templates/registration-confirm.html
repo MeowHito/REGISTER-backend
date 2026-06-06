@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title>ยืนยันการสมัครเข้าร่วมกิจกรรม</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+        @media only screen and (max-width: 480px) {
+            .email-body { padding: 16px 8px !important; }
+            .logo-pad { padding: 16px 0 !important; }
+            .content-pad { padding-left: 20px !important; padding-right: 20px !important; }
+            .header-pad { padding: 24px 20px 20px 20px !important; }
+            .header-title { font-size: 22px !important; }
+            .header-subtitle { font-size: 13px !important; }
+            .header-badge-col { display: block !important; width: 100% !important; text-align: left !important; padding-top: 12px !important; }
+            .status-badge { padding: 4px 10px !important; }
+            .status-text { font-size: 14px !important; }
+            .meta-cell { display: block !important; width: 100% !important; border-right: none !important; border-bottom: 1px solid #e2e8f0 !important; box-sizing: border-box !important; }
+            .grand-total-label { font-size: 14px !important; }
+            .grand-total-amount { font-size: 18px !important; }
+            .footer-pad { padding-left: 20px !important; padding-right: 20px !important; }
+        }
+    </style>
+</head>
+<body class="email-body" style="font-family: 'Inter', 'Segoe UI', Arial, sans-serif; background-color: #f8fafc; padding: 40px 20px; margin: 0;">
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 640px; margin: 0 auto;">
+        <!-- Logo centered above card -->
+        <tr>
+            <td class="logo-pad" style="text-align: center; padding: 28px 0;">
+                <img th:src="${logoUrl}" alt="Action in Thai" width="140" style="display: inline-block; height: auto;" />
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px -4px rgba(30, 41, 59, 0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td th:style="'background: linear-gradient(145deg, rgba(30,41,59,0.88) 0%, rgba(15,23,42,0.92) 50%, rgba(234,179,8,0.15) 100%)' + (${coverImg != null and coverImg != ''} ? ', url(&quot;' + ${coverImg} + '&quot;)' : '') + '; background-size: cover; background-position: center; padding: 0;'">
+                            <div style="height: 4px; background: linear-gradient(90deg, #eab308 0%, #facc15 50%, #fde047 100%);"></div>
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td class="header-pad" style="padding: 36px 40px 28px 40px;">
+                                        <table width="100%" cellpadding="0" cellspacing="0">
+                                            <tr>
+                                                <td>
+                                                    <h1 class="header-title" style="margin: 0; font-size: 28px; font-weight: 800; color: #ffffff; line-height: 1.2; letter-spacing: -0.02em;">ยืนยันการสมัคร</h1>
+                                                    <p class="header-subtitle" style="margin: 8px 0 0 0; font-size: 15px; color: rgba(255,255,255,0.6);">Registration Confirmation</p>
+                                                </td>
+                                                <td class="header-badge-col" style="text-align: right; vertical-align: top;">
+                                                    <table cellpadding="0" cellspacing="0">
+                                                        <tr>
+                                                            <td class="status-badge" style="background-color: rgba(234, 179, 8, 0.2); border: 1px solid rgba(234, 179, 8, 0.4); border-radius: 20px; padding: 6px 16px;">
+                                                                <span class="status-text" style="font-size: 20px; font-weight: 700; color: #fde047;">&#9679; รอชำระเงิน</span>
+                                                            </td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Metadata Card -->
+                    <tr>
+                        <td class="content-pad" style="padding: 28px 40px 0 40px;">
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border-radius: 12px; overflow: hidden;">
+                                <!-- Event Name Bar -->
+                                <tr>
+                                    <td colspan="2" style="background-color: #1e293b; padding: 14px 20px; border-bottom: 2px solid #337ab7;">
+                                        <p style="margin: 0; font-size: 15px; font-weight: 700; color: #ffffff;" th:text="${eventName} ?: '-'">Event Name</p>
+                                    </td>
+                                </tr>
+                                <!-- Row: Order No | Registration Date -->
+                                <tr>
+                                    <td class="meta-cell" style="width: 50%; padding: 16px 20px; border-right: 1px solid #e2e8f0;">
+                                        <p style="margin: 0 0 4px 0; font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">รหัสใบสมัคร / ORDER NO</p>
+                                        <p style="margin: 0; font-size: 15px; font-weight: 700; color: #1e293b;" th:text="${orderNo} ?: '-'">OrderNo</p>
+                                    </td>
+                                    <td class="meta-cell" style="width: 50%; padding: 16px 20px;">
+                                        <p style="margin: 0 0 4px 0; font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">วันที่สมัคร / REGISTER DATE</p>
+                                        <p style="margin: 0; font-size: 15px; font-weight: 500; color: #334155;">
+                                            <span th:text="${dateRegister} ?: '-'">Date</span>
+                                            <span th:if="${dateRegister != null and dateRegister != '-'}" style="color: #94a3b8; font-size: 12px;">(UTC+7)</span>
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Greeting -->
+                    <tr>
+                        <td class="content-pad" style="padding: 24px 40px 0 40px;">
+                            <p style="margin: 0; font-size: 15px; line-height: 1.7; color: #64748b;">ขอบคุณสำหรับการสมัครเข้าร่วมกิจกรรม ระบบได้รับข้อมูลการสมัครของท่านเรียบร้อยแล้ว กรุณาตรวจสอบรายละเอียดและชำระเงินตามขั้นตอนด้านล่าง</p>
+                        </td>
+                    </tr>
+
+                    <!-- Applicant Details -->
+                    <tr>
+                        <td class="content-pad" style="padding: 24px 40px 0 40px;">
+                            <p style="margin: 0 0 12px 0; font-size: 13px; font-weight: 700; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px;">รายละเอียดผู้สมัคร</p>
+                            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse; font-size: 13px;">
+                                <thead>
+                                    <tr>
+                                        <th style="padding: 10px 12px; background-color: #1e293b; color: #ffffff; text-align: left; font-weight: 600; font-size: 12px;">รายละเอียด</th>
+                                        <th style="padding: 10px 12px; background-color: #1e293b; color: #ffffff; text-align: right; font-weight: 600; font-size: 12px;">ราคา (บาท)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr th:each="a, iterStat : ${applicants}"
+                                        th:style="${iterStat.index} % 2 == 0 ? 'background-color: #ffffff' : 'background-color: #f8fafc'">
+                                        <!-- Detail Column -->
+                                        <td style="padding: 14px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: top;">
+                                            <p style="margin: 0 0 4px 0; font-size: 14px; font-weight: 600; color: #1e293b;">
+                                                <span th:text="${(a['firstName'] != null ? a['firstName'] : '') + ' ' + (a['lastName'] != null ? a['lastName'] : '')}">Name</span>
+                                            </p>
+                                            <p style="margin: 0; font-size: 12px; color: #64748b; line-height: 1.6;">
+                                                <span th:text="${a['eventTypeName']} ?: '-'">Type</span> <span th:text="${a['ageGroupName']}"></span>
+                                                <span th:if="${a['teamClub'] != null and a['teamClub'] != ''}">
+                                                    &middot; <span th:text="${a['teamClub']}">TeamClub</span>
+                                                </span>
+                                                <br />
+                                                เสื้อ: <span th:text="${(a['shirtSizeName'] == null or a['shirtSizeName'] == 'No Shirt') ? 'ไม่รับเสื้อ' : ((a['shirtTypeName'] ?: '-') + ' / ' + a['shirtSizeName'])}">Shirt</span>
+                                                &middot; รับเสื้อและอุปกรณ์: <span th:text="${a['deliveryMethod']} == 'post' ? 'ไปรษณีย์' : 'รับหน้างาน'">Delivery</span>
+                                            </p>
+                                        </td>
+                                        <!-- Price Column -->
+                                        <td style="padding: 14px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: top; text-align: right;">
+                                            <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; font-size: 12px; line-height: 1.8;">
+                                                <tr>
+                                                    <td style="color: #64748b;">ค่าสมัคร</td>
+                                                    <td style="text-align: right; color: #334155;" th:text="${#numbers.formatDecimal(a['price'] != null ? a['price'] : 0, 1, 'COMMA', 0, 'POINT')}">0</td>
+                                                </tr>
+                                                <tr th:if="${a['discountNoShirt'] != null and a['discountNoShirt'] > 0}">
+                                                    <td style="color: #64748b;">ส่วนลด</td>
+                                                    <td style="text-align: right; color: #ef4444;" th:text="${#numbers.formatDecimal(a['discountNoShirt'], 1, 'COMMA', 0, 'POINT')}">0</td>
+                                                </tr>
+                                                <tr th:if="${a['deliveryMethod'] == 'post' and a['shippingFee'] != null and a['shippingFee'] > 0}">
+                                                    <td style="color: #64748b;">ค่าจัดส่ง</td>
+                                                    <td style="text-align: right; color: #334155;" th:text="${#numbers.formatDecimal(a['shippingFee'], 1, 'COMMA', 0, 'POINT')}">0</td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="font-weight: 700; color: #1e293b; border-top: 1px solid #e2e8f0; padding-top: 4px;">รวม</td>
+                                                    <td style="text-align: right; font-weight: 700; color: #1e293b; border-top: 1px solid #e2e8f0; padding-top: 4px;" th:text="${#numbers.formatDecimal((a['price'] != null ? a['price'] : 0) - (a['discountNoShirt'] != null ? a['discountNoShirt'] : 0) + (a['deliveryMethod'] == 'post' and a['shippingFee'] != null ? a['shippingFee'] : 0), 1, 'COMMA', 0, 'POINT')}">0</td>
+                                                </tr>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Grand Total -->
+                    <tr>
+                        <td class="content-pad" style="padding: 24px 40px 0 40px;">
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border-radius: 10px; overflow: hidden;">
+                                <tr>
+                                    <td style="padding: 20px;">
+                                        <table width="100%" cellpadding="0" cellspacing="0">
+                                            <tr>
+                                                <td class="grand-total-label" style="font-size: 16px; font-weight: 800; color: #1e293b;">ยอดชำระทั้งสิ้น</td>
+                                                <td style="text-align: right;">
+                                                    <span class="grand-total-amount" style="font-size: 20px; font-weight: 800; color: #eab308;" th:text="${#numbers.formatDecimal(grandTotal != null ? grandTotal : 0, 1, 'COMMA', 0, 'POINT')}">0</span>
+                                                    <span style="font-size: 14px; font-weight: 600; color: #eab308;"> บาท</span>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Payment CTA Button -->
+                    <tr th:if="${paymentLink != null}">
+                        <td class="content-pad" style="padding: 28px 40px 0 40px; text-align: center;">
+                            <table cellpadding="0" cellspacing="0" style="margin: 0 auto;">
+                                <tr>
+                                    <td style="background: linear-gradient(135deg, #337ab7 0%, #2a6399 100%); border-radius: 8px; padding: 14px 40px;">
+                                        <a th:href="${paymentLink}" style="color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 700; display: inline-block;">ชำระเงิน</a>
+                                    </td>
+                                </tr>
+                            </table>
+                            <p style="margin: 12px 0 0 0; font-size: 12px; color: #94a3b8;">* กรุณาชำระเงินภายใน 72 ชั่วโมง นับจากวันที่สมัคร</p>
+                        </td>
+                    </tr>
+
+                    <!-- Note -->
+                    <tr>
+                        <td class="content-pad" style="padding: 20px 40px 0 40px;">
+                            <p style="margin: 0 0 4px 0; font-size: 13px; font-weight: 700; color: #1e293b;">หมายเหตุ</p>
+                            <p style="margin: 0; font-size: 13px; color: #64748b; line-height: 1.7;">กรุณาชำระเงินภายในระยะเวลาที่กำหนด เพื่อรักษาสิทธิ์ในการเข้าร่วมกิจกรรม หากต้องการความช่วยเหลือ สามารถติดต่อทีมงานได้ทุกช่องทาง</p>
+                        </td>
+                    </tr>
+
+                    <!-- Spacer -->
+                    <tr>
+                        <td style="padding: 16px 0 0 0;"></td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td class="content-pad footer-pad" style="background-color: #f1f5f9; padding: 24px 40px; border-top: 1px solid #e2e8f0; border-radius: 0 0 16px 16px;">
+                            <p style="margin: 0 0 2px 0; font-size: 13px; color: #888888;">ขอแสดงความนับถือ</p>
+                            <p style="margin: 0; font-size: 14px; font-weight: 700; color: #1a1a2e;">ทีมงาน Action in Thai</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+        <!-- Copyright -->
+        <tr>
+            <td style="text-align: center; padding: 20px 0 0 0;">
+                <p style="margin: 0; font-size: 11px; color: #94a3b8;">&copy; 2023 Action in Thai. All Rights Reserved.</p>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
