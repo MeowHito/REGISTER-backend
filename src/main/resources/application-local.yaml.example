@@ -14,7 +14,7 @@ spring:
     # Port 3307 = the docker-compose MySQL (avoids clashing with a native MySQL on 3306)
     url: jdbc:mysql://127.0.0.1:3307/membership_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Bangkok
     username: root
-    password: <DB_PASSWORD>          # must match MYSQL_ROOT_PASSWORD in docker-compose.yml
+    password: localdev               # local throwaway; matches MYSQL_ROOT_PASSWORD in docker-compose.yml
 
   jpa:
     hibernate:

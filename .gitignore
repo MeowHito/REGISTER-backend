@@ -18,6 +18,10 @@ dist/
 
 # Package files
 *.jar
+# ...but DO track these required jars (gradle wrapper + JasperReports font extensions)
+!gradle/wrapper/gradle-wrapper.jar
+!src/main/resources/THSarabun.jar
+!src/main/resources/Kanit.jar
 
 # Maven
 target/

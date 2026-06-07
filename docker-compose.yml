@@ -1,0 +1,77 @@
+# Local dev infrastructure for the membership backend.
+# Brings up MySQL, Redis and RabbitMQ with credentials that match
+# src/main/resources/application-local.yaml — so no code changes are needed.
+#
+# Usage:
+#   docker compose up -d        # start all services in background
+#   docker compose ps           # check status
+#   docker compose logs -f      # follow logs
+#   docker compose down         # stop (keeps data volumes)
+#   docker compose down -v      # stop AND wipe data (fresh DB next time)
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: membership-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: localdev          # local throwaway password; matches application-local.yaml
+      MYSQL_DATABASE: membership_db          # matches datasource.url
+      TZ: Asia/Bangkok
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+07:00
+    ports:
+      # Host port 3307 to avoid clashing with a native MySQL that may already
+      # own 3306. The app connects to 127.0.0.1:3307 (see application-local.yaml).
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      # On first init only, creates the Quartz QRTZ_* tables inside membership_db.
+      # (JPA ddl-auto=create builds the app tables; Quartz tables are NOT JPA entities,
+      #  and the app is configured with quartz.jdbc.initialize-schema=never.)
+      - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-plocaldev"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: membership-redis
+    restart: unless-stopped
+    # No password — matches application-local.yaml (redis.password is empty).
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: membership-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: guest          # matches application-local.yaml
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"      # AMQP
+      - "15672:15672"    # management UI -> http://localhost:15672 (guest/guest)
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mysql-data:
+  redis-data:
+  rabbitmq-data:
