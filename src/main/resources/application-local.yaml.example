@@ -1,0 +1,106 @@
+# Template for local development config.
+#
+#   cp application-local.yaml.example application-local.yaml
+#
+# Then fill in the placeholders. The real application-local.yaml is gitignored
+# (it holds secrets) — never commit it. For production use environment variables
+# as defined in application.yaml instead.
+#
+# The default DB/Redis/RabbitMQ values below match backend/docker-compose.yml,
+# so after `docker compose up -d` you only need to set the placeholders.
+
+spring:
+  datasource:
+    # Port 3307 = the docker-compose MySQL (avoids clashing with a native MySQL on 3306)
+    url: jdbc:mysql://127.0.0.1:3307/membership_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Bangkok
+    username: root
+    password: <DB_PASSWORD>          # must match MYSQL_ROOT_PASSWORD in docker-compose.yml
+
+  jpa:
+    hibernate:
+      ddl-auto: create
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: <GMAIL_ADDRESS>        # e.g. you@gmail.com (see CREDENTIALS_GUIDE.md #1)
+    password: <GMAIL_APP_PASSWORD>   # 16-char Gmail App Password
+
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+
+  redis:
+    host: localhost
+    port: 6379
+    password:
+
+app:
+  announcement-mail-target: admin@example.com
+  contact-mail-target: admin@example.com
+  support-mail-cc: admin@example.com
+  seed-user-password: <SEED_ADMIN_PASSWORD>   # password for the seeded admin users
+  env: LOCAL
+  fe-url: http://localhost:3000
+  be-url: http://localhost:8080
+
+jwt:
+  secret-key: <JWT_SECRET_KEY>                 # any long random string for local
+
+participant-token:
+  secret-key: <PARTICIPANT_TOKEN_SECRET>       # any long random string for local
+
+management:
+  health:
+    mail:
+      enabled: false
+
+aws:
+  s3:
+    accessKey: dummy
+    secretKey: dummy
+    bucketName: dummy
+    rootPath: action_membership/
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+login:
+  auth:
+    line:
+      client-id: dummy
+      client-secret: dummy
+    google:
+      client-id: dummy
+      client-secret: dummy
+      redirect-uri: http://localhost:3000/auth/google/callback
+    facebook:
+      client-id: dummy
+      client-secret: dummy
+
+scb:
+  app-key: dummy
+  app-secret: dummy
+  base-url: https://api-sandbox.partners.scb/partners/sandbox
+  company-id: dummy
+  terminal-id: dummy
+  pp-id: dummy
+  ref3: SCB
+
+payment:
+  2c2p:
+    merchant-id: dummy
+    secret-key: dummy
+    api-url: https://sandbox-pgw.2c2p.com/payment/4.1
+
+2c2p:
+  merchant-id: dummy
+  merchant-id-ewallet: dummy
+  secret-key: dummy
+  inquiry-url: https://sandbox-pgw.2c2p.com/payment/4.1/paymentInquiry
+  token-url: https://sandbox-pgw.2c2p.com/payment/4.1/paymentToken

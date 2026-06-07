@@ -53,3 +53,6 @@ Thumbs.db
 build/
 bin/
 .vscode/settings.json
+
+# Local config with secrets (keep the .example template tracked)
+src/main/resources/application-local.yaml
