@@ -1,0 +1,18 @@
+---
+description: Security rules — never commit secrets
+alwaysApply: true
+---
+
+# 🔒 NEVER commit secrets
+
+Full policy: see `AGENTS.md`.
+
+Never stage/commit/push real passwords, API keys, OAuth client secrets (`GOCSPX-…`),
+Google API keys (`AIza…`), AWS keys (`AKIA…`), JWT secrets, or payment keys.
+
+Real values live only in gitignored files (`src/main/resources/application-local.yaml`,
+`.env`, `.env.production`) or environment variables. Only `*.example` templates with
+placeholders are committed.
+
+Before committing: review `git diff --staged` for secrets; never `git add -A` blindly;
+never remove `.gitignore` entries that protect secret files.
