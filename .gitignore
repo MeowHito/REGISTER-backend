@@ -60,3 +60,7 @@ bin/
 
 # Local config with secrets (keep the .example template tracked)
 src/main/resources/application-local.yaml
+
+# Production env files with real secrets (keep the .example template tracked)
+.env
+.env.production
