@@ -46,6 +46,9 @@ public class SecurityConfiguration {
 	@Value("${app.env}")
 	private String appEnv;
 
+	@Value("${app.fe-url}")
+	private String appFeUrl;
+
 	private static final String[] PUBLIC_URLS = {
 			"/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**",
 			"/swagger-resources/**", "/webjars/**",
@@ -162,8 +165,7 @@ public class SecurityConfiguration {
 					"http://127.0.0.1:*",
 					"https://membership.testuiapp.com"));
 		} else {
-			cfg.setAllowedOriginPatterns(Arrays.asList(
-					"https://register-action-in-thai.netlify.app", "https://register.action.in.th"));
+			cfg.setAllowedOriginPatterns(Arrays.asList(appFeUrl));
 		}
 
 		cfg.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"));
