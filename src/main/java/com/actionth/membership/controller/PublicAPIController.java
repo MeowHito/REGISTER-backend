@@ -240,63 +240,101 @@ public class PublicAPIController {
     @PostMapping("/login")
     public Response<Object> login(
             @RequestBody SocialAuthDTORequest socialAuthDTORequest, HttpServletResponse servletResponse) {
+        String type = socialAuthDTORequest.getType();
+        String token = socialAuthDTORequest.getToken();
+
+        if (type == null || type.isEmpty()) {
+            return new Response<>(null, "ประเภทการเข้าสู่ระบบไม่ถูกต้อง", false);
+        }
+
+        if (token == null || token.isEmpty()) {
+            return new Response<>(null, "ไม่พบ Token กรุณาลองใหม่อีกครั้ง", false);
+        }
+
+        String email = null;
         try {
-            String type = socialAuthDTORequest.getType();
-            String token = socialAuthDTORequest.getToken();
-
-            if (type == null || type.isEmpty()) {
-                return new Response<>(null, "Type is required.", false);
-            }
-
-            if (token == null || token.isEmpty()) {
-                return new Response<>(null, "Token is required.", false);
-            }
-
-            String email = null;
             switch (type.toLowerCase()) {
                 case "line":
-                    String lineResponse = lineAuthService.verifyIdToken(token);
-                    if (lineResponse == null || lineResponse.isEmpty()) {
-                        return new Response<>(null, "Invalid LINE response", false);
-                    }
-                    Map<String, Object> lineData = new ObjectMapper().readValue(lineResponse,
-                            new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {
-                            });
-                    email = (String) lineData.get("email");
+                    email = resolveLineEmail(token);
                     break;
-
                 case "google":
-                    Map<String, Object> tokenResponse = googleAuthService.exchangeCodeForToken(token);
-                    String idTokenGoogle = (String) tokenResponse.get("id_token");
-                    if (idTokenGoogle == null || idTokenGoogle.isEmpty()) {
-                        return new Response<>(null, "ID Token not found in Google response.", false);
-                    }
-                    Map<String, Object> googleData = new ObjectMapper().readValue(
-                            new String(java.util.Base64.getDecoder().decode(idTokenGoogle.split("\\.")[1])),
-                            new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {
-                            });
-                    email = (String) googleData.get("email");
+                    email = resolveGoogleEmail(token);
                     break;
-
                 case "facebook":
-                    if (!facebookAuthService.validateAccessToken(token)) {
-                        return new Response<>(null, "Invalid Facebook Access Token.", false);
-                    }
-                    email = facebookAuthService.getEmailFromFacebook(token);
+                    email = resolveFacebookEmail(token);
                     break;
-
                 default:
-                    return new Response<>(null, "Invalid login type.", false);
+                    return new Response<>(null, "ประเภทการเข้าสู่ระบบไม่รองรับ: " + type, false);
             }
-
-            if (email == null || email.isEmpty()) {
-                return new Response<>(null, "Email not found.", false);
-            }
-
-            return processUserLogin(email, servletResponse);
+        } catch (SocialLoginException e) {
+            return new Response<>(null, e.getMessage(), false);
         } catch (Exception e) {
-            return new Response<>(null, "Login failed: " + e.getMessage(), false);
+            return new Response<>(null, "เกิดข้อผิดพลาดในการยืนยันตัวตน กรุณาลองใหม่อีกครั้ง", false);
         }
+
+        if (email == null || email.isEmpty()) {
+            return new Response<>(null, "ไม่พบอีเมลจากบัญชีที่เลือก กรุณาใช้บัญชีที่มีอีเมลที่ยืนยันแล้ว", false);
+        }
+
+        return processUserLogin(email, servletResponse);
+    }
+
+    private String resolveLineEmail(String token) {
+        try {
+            String lineResponse = lineAuthService.verifyIdToken(token);
+            if (lineResponse == null || lineResponse.isEmpty()) {
+                throw new SocialLoginException("ไม่สามารถยืนยัน LINE Token ได้ กรุณาลองใหม่");
+            }
+            Map<String, Object> lineData = new ObjectMapper().readValue(lineResponse,
+                    new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+            return (String) lineData.get("email");
+        } catch (SocialLoginException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new SocialLoginException("ไม่สามารถเข้าสู่ระบบด้วย LINE ได้ กรุณาลองใหม่อีกครั้ง");
+        }
+    }
+
+    private String resolveGoogleEmail(String token) {
+        try {
+            Map<String, Object> tokenResponse = googleAuthService.exchangeCodeForToken(token);
+            String idTokenGoogle = (String) tokenResponse.get("id_token");
+            if (idTokenGoogle == null || idTokenGoogle.isEmpty()) {
+                throw new SocialLoginException("ไม่พบข้อมูลจาก Google กรุณาลองใหม่อีกครั้ง");
+            }
+            Map<String, Object> googleData = new ObjectMapper().readValue(
+                    new String(java.util.Base64.getDecoder().decode(idTokenGoogle.split("\\.")[1])),
+                    new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+            return (String) googleData.get("email");
+        } catch (SocialLoginException e) {
+            throw e;
+        } catch (Exception e) {
+            String msg = e.getMessage() != null ? e.getMessage() : "";
+            if (msg.contains("redirect_uri_mismatch")) {
+                throw new SocialLoginException("การตั้งค่า Google OAuth ไม่ถูกต้อง (redirect_uri) กรุณาติดต่อผู้ดูแลระบบ");
+            }
+            if (msg.contains("invalid_grant") || msg.contains("400")) {
+                throw new SocialLoginException("รหัสยืนยันตัวตนของ Google หมดอายุ กรุณาลองใหม่อีกครั้ง");
+            }
+            throw new SocialLoginException("ไม่สามารถเข้าสู่ระบบด้วย Google ได้ กรุณาลองใหม่อีกครั้ง");
+        }
+    }
+
+    private String resolveFacebookEmail(String token) {
+        try {
+            if (!facebookAuthService.validateAccessToken(token)) {
+                throw new SocialLoginException("Facebook Token ไม่ถูกต้องหรือหมดอายุ กรุณาลองใหม่");
+            }
+            return facebookAuthService.getEmailFromFacebook(token);
+        } catch (SocialLoginException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new SocialLoginException("ไม่สามารถเข้าสู่ระบบด้วย Facebook ได้ กรุณาลองใหม่อีกครั้ง");
+        }
+    }
+
+    private static class SocialLoginException extends RuntimeException {
+        SocialLoginException(String message) { super(message); }
     }
 
     @GetMapping("/validateUserToken")

@@ -78,7 +78,7 @@ login:
     google:
       client-id: dummy
       client-secret: dummy
-      redirect-uri: http://localhost:3000/auth/google/callback
+      redirect-uri: postmessage   # popup flow uses postmessage; set AUTH_GOOGLE_REDIRECT_URL=postmessage in prod
     facebook:
       client-id: dummy
       client-secret: dummy
