@@ -442,7 +442,70 @@ public class DataLoader implements CommandLineRunner {
 			eventRepository.saveAll(events);
 		}
 
+		seedCountryState();
+
 		migrateWebhookLogs();
+	}
+
+	/**
+	 * Seeds the {@code countryState} table with the 77 Thai provinces if it is empty.
+	 * This master data powers the province dropdowns on the event-creation form and
+	 * the public registration form (billing province). It is environment-agnostic on
+	 * purpose — the data is required in every environment, including PROD — and only
+	 * runs when the table has no rows, so it is safe to leave enabled across restarts.
+	 */
+	private void seedCountryState() {
+		Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM `countryState`", Integer.class);
+		if (count != null && count > 0) {
+			return;
+		}
+
+		final String[][] provinces = {
+			{ "Bangkok", "กรุงเทพมหานคร" }, { "Krabi", "กระบี่" }, { "Kanchanaburi", "กาญจนบุรี" },
+			{ "Kalasin", "กาฬสินธุ์" }, { "Kamphaeng Phet", "กำแพงเพชร" }, { "Khon Kaen", "ขอนแก่น" },
+			{ "Chanthaburi", "จันทบุรี" }, { "Chachoengsao", "ฉะเชิงเทรา" }, { "Chon Buri", "ชลบุรี" },
+			{ "Chai Nat", "ชัยนาท" }, { "Chaiyaphum", "ชัยภูมิ" }, { "Chumphon", "ชุมพร" },
+			{ "Chiang Rai", "เชียงราย" }, { "Chiang Mai", "เชียงใหม่" }, { "Trang", "ตรัง" },
+			{ "Trat", "ตราด" }, { "Tak", "ตาก" }, { "Nakhon Nayok", "นครนายก" },
+			{ "Nakhon Pathom", "นครปฐม" }, { "Nakhon Phanom", "นครพนม" }, { "Nakhon Ratchasima", "นครราชสีมา" },
+			{ "Nakhon Si Thammarat", "นครศรีธรรมราช" }, { "Nakhon Sawan", "นครสวรรค์" }, { "Nonthaburi", "นนทบุรี" },
+			{ "Narathiwat", "นราธิวาส" }, { "Nan", "น่าน" }, { "Bueng Kan", "บึงกาฬ" },
+			{ "Buri Ram", "บุรีรัมย์" }, { "Pathum Thani", "ปทุมธานี" }, { "Prachuap Khiri Khan", "ประจวบคีรีขันธ์" },
+			{ "Prachin Buri", "ปราจีนบุรี" }, { "Pattani", "ปัตตานี" }, { "Phra Nakhon Si Ayutthaya", "พระนครศรีอยุธยา" },
+			{ "Phayao", "พะเยา" }, { "Phang Nga", "พังงา" }, { "Phatthalung", "พัทลุง" },
+			{ "Phichit", "พิจิตร" }, { "Phitsanulok", "พิษณุโลก" }, { "Phetchaburi", "เพชรบุรี" },
+			{ "Phetchabun", "เพชรบูรณ์" }, { "Phrae", "แพร่" }, { "Phuket", "ภูเก็ต" },
+			{ "Maha Sarakham", "มหาสารคาม" }, { "Mukdahan", "มุกดาหาร" }, { "Mae Hong Son", "แม่ฮ่องสอน" },
+			{ "Yasothon", "ยโสธร" }, { "Yala", "ยะลา" }, { "Roi Et", "ร้อยเอ็ด" },
+			{ "Ranong", "ระนอง" }, { "Rayong", "ระยอง" }, { "Ratchaburi", "ราชบุรี" },
+			{ "Lop Buri", "ลพบุรี" }, { "Lampang", "ลำปาง" }, { "Lamphun", "ลำพูน" },
+			{ "Loei", "เลย" }, { "Si Sa Ket", "ศรีสะเกษ" }, { "Sakon Nakhon", "สกลนคร" },
+			{ "Songkhla", "สงขลา" }, { "Satun", "สตูล" }, { "Samut Prakan", "สมุทรปราการ" },
+			{ "Samut Songkhram", "สมุทรสงคราม" }, { "Samut Sakhon", "สมุทรสาคร" }, { "Sa Kaeo", "สระแก้ว" },
+			{ "Saraburi", "สระบุรี" }, { "Sing Buri", "สิงห์บุรี" }, { "Sukhothai", "สุโขทัย" },
+			{ "Suphan Buri", "สุพรรณบุรี" }, { "Surat Thani", "สุราษฎร์ธานี" }, { "Surin", "สุรินทร์" },
+			{ "Nong Khai", "หนองคาย" }, { "Nong Bua Lam Phu", "หนองบัวลำภู" }, { "Ang Thong", "อ่างทอง" },
+			{ "Amnat Charoen", "อำนาจเจริญ" }, { "Udon Thani", "อุดรธานี" }, { "Uttaradit", "อุตรดิตถ์" },
+			{ "Uthai Thani", "อุทัยธานี" }, { "Ubon Ratchathani", "อุบลราชธานี" }
+		};
+
+		List<Object[]> batch = new ArrayList<>();
+		for (int i = 0; i < provinces.length; i++) {
+			batch.add(new Object[] {
+				i + 1,                          // id (sequential PK)
+				UUID.randomUUID().toString(),   // uuid (stable option value)
+				"Thailand",                     // countryEn
+				"ประเทศไทย",                     // countryLocal
+				provinces[i][0],                // stateEn
+				provinces[i][1],                // stateLocal
+				"Province"                      // stateType
+			});
+		}
+
+		jdbcTemplate.batchUpdate(
+			"INSERT INTO `countryState` (`id`, `uuid`, `countryEn`, `countryLocal`, `stateEn`, `stateLocal`, `stateType`) "
+				+ "VALUES (?, ?, ?, ?, ?, ?, ?)",
+			batch);
 	}
 
 	@SuppressWarnings("unchecked")
