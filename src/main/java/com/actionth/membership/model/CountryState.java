@@ -7,7 +7,7 @@ import javax.persistence.*;
 @Entity
 @Data
 @Immutable
-@Table(name = "countryState", schema = "master")
+@Table(name = "countryState")
 public class CountryState {
     @Id
     private Integer id;

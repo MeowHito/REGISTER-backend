@@ -19,7 +19,10 @@ public class MasterDataRepository {
     }
     
     public List<Map<String, Object>> getAllCountryState() {
-        String sql = "SELECT active, uuid as id, countryEn, countryLocal, stateEn, stateLocal, stateType FROM countryState WHERE active = true";
+        // NOTE: the `countryState` table has no `active` column (see schema-prod.sql and
+        // the CountryState entity). Selecting/filtering on `active` throws a SQL error and
+        // makes the province dropdown show "no data". Query only the columns that exist.
+        String sql = "SELECT uuid as id, countryEn, countryLocal, stateEn, stateLocal, stateType FROM countryState";
         return jdbcTemplate.queryForList(sql);
     }
     
