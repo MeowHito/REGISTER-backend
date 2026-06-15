@@ -2,6 +2,8 @@ package com.actionth.membership.service;
 
 import java.io.File;
 import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.Date;
@@ -39,13 +41,46 @@ public class AWSService {
     @Value("${aws.s3.rootPath}")
     private String rootPath;
 
+    // The S3 client below is locked to ap-southeast-1, so public object URLs must
+    // target the same regional endpoint. The region-less host (bucket.s3.amazonaws.com)
+    // points at us-east-1 and does not resolve buckets created in other regions.
+    private static final Regions S3_REGION = Regions.AP_SOUTHEAST_1;
+
     Logger logger = LoggerFactory.getLogger(AWSService.class);
 
     private AmazonS3 authClient() {
         BasicAWSCredentials awsCreds = new BasicAWSCredentials(accessKey, secretKey);
-        return AmazonS3ClientBuilder.standard().withRegion(Regions.AP_SOUTHEAST_1)
+        return AmazonS3ClientBuilder.standard().withRegion(S3_REGION)
                 .withCredentials(new AWSStaticCredentialsProvider(awsCreds))
                 .build();
+    }
+
+    /**
+     * Builds the permanent public URL for an S3 object, including the bucket's
+     * region and with every path segment URL-encoded so keys that contain spaces
+     * or special characters (e.g. "ChatGPT Image Jun 8, 2026.png") resolve correctly.
+     */
+    private String buildPublicUrl(String prefix, String objectKey) {
+        String objectPath = rootPath + prefix + "/" + objectKey;
+        String encodedPath = encodeS3Path(objectPath);
+        return String.format("https://%s.s3.%s.amazonaws.com/%s",
+                bucketName, S3_REGION.getName(), encodedPath);
+    }
+
+    private boolean isAbsoluteUrl(String value) {
+        if (value == null) {
+            return false;
+        }
+        String v = value.trim().toLowerCase();
+        return v.startsWith("http://") || v.startsWith("https://")
+                || v.startsWith("//") || v.startsWith("data:") || v.startsWith("blob:");
+    }
+
+    private String encodeS3Path(String path) {
+        // Encode each segment but keep "/" separators intact.
+        return URLEncoder.encode(path, StandardCharsets.UTF_8)
+                .replace("+", "%20")
+                .replace("%2F", "/");
     }
 
     public List<Bucket> listBucket() {
@@ -82,6 +117,13 @@ public class AWSService {
             return null;
         }
 
+        // The stored value may already be a full URL (external/imported image) rather
+        // than an S3 object key. Return it untouched instead of nesting it under the
+        // bucket path, which would produce a broken URL.
+        if (isAbsoluteUrl(objectKey)) {
+            return objectKey;
+        }
+
         String dest = bucketName + "/" + rootPath + prefix;
 
         Date expiration = Date.from(Instant.now().plusSeconds(60 * 60 * 24 * 2));
@@ -95,7 +137,7 @@ public class AWSService {
                 URL url = s3.generatePresignedUrl(req);
                 return url.toString();
             } else {
-                return String.format("https://%s.s3.amazonaws.com/%s/%s", bucketName , rootPath + prefix, objectKey);
+                return buildPublicUrl(prefix, objectKey);
             }
         } catch (AmazonServiceException e) {
             e.printStackTrace();
@@ -139,7 +181,7 @@ public class AWSService {
         AmazonS3 s3 = authClient();
         try {
             s3.setObjectAcl(dest, objectKey, CannedAccessControlList.PublicRead);
-            String url = String.format("https://%s.s3.amazonaws.com/%s/%s", bucketName , rootPath + prefix, objectKey);
+            String url = buildPublicUrl(prefix, objectKey);
             logger.info("Made S3 object public: {}/{} - URL: {}", dest, objectKey, url);
             return url;
         } catch (AmazonServiceException e) {

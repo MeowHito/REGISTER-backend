@@ -13,17 +13,30 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 # --- locate a JDK 17 -------------------------------------------------------
+# Returns 0 if $1 is a JDK whose major version is exactly 17.
+is_jdk17() {
+  [ -x "$1/bin/java" ] || return 1
+  "$1/bin/java" -version 2>&1 | grep -Eq 'version "17[.\"]'
+}
+
 JAVA17=""
-if [ -x /usr/libexec/java_home ] && /usr/libexec/java_home -v 17 >/dev/null 2>&1; then
-  JAVA17="$(/usr/libexec/java_home -v 17)"
-elif [ -d /opt/homebrew/opt/openjdk@17 ]; then
-  JAVA17="/opt/homebrew/opt/openjdk@17"
-elif [ -d /usr/local/opt/openjdk@17 ]; then
-  JAVA17="/usr/local/opt/openjdk@17"
-fi
+# Try candidates in order, but VERIFY each is really 17. Note: on some machines
+# `java_home -v 17` happily returns a newer JDK (e.g. 25) when no real 17 is
+# registered, so we cannot trust it without checking the actual version.
+for CAND in \
+  "$(/usr/libexec/java_home -v 17 2>/dev/null || true)" \
+  /opt/homebrew/opt/openjdk@17 \
+  /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home \
+  /usr/local/opt/openjdk@17 \
+  /usr/local/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home; do
+  if [ -n "$CAND" ] && is_jdk17 "$CAND"; then
+    JAVA17="$CAND"
+    break
+  fi
+done
 
 if [ -z "$JAVA17" ]; then
-  echo "ERROR: JDK 17 not found. Install it first:  brew install openjdk@17" >&2
+  echo "ERROR: real JDK 17 not found. Install it first:  brew install openjdk@17" >&2
   exit 1
 fi
 
