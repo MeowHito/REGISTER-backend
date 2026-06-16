@@ -98,11 +98,25 @@ public class AWSService {
 
         try {
             s3.putObject(dest, fileName, file);
-            if (isPublic) {
-                s3.setObjectAcl(dest, fileName, CannedAccessControlList.PublicRead);
+
+            if (Boolean.TRUE.equals(isPublic)) {
+                // Public read is granted by the bucket policy. Setting a public-read
+                // ACL is best-effort: buckets with ACLs disabled (Object Ownership =
+                // bucket owner enforced) reject it, and that must NOT fail an
+                // otherwise-successful upload.
+                try {
+                    s3.setObjectAcl(dest, fileName, CannedAccessControlList.PublicRead);
+                } catch (AmazonServiceException aclEx) {
+                    logger.warn("Could not set public-read ACL on {}/{} (relying on bucket policy): {}",
+                            dest, fileName, aclEx.getErrorMessage());
+                }
             }
         } catch (AmazonServiceException e) {
-            logger.error(e.getErrorMessage());
+            // The object did not upload. Fail loudly instead of returning a file name
+            // that points at nothing — silently swallowing this is what let broken
+            // image references reach the database.
+            logger.error("S3 upload failed for {}/{}: {}", dest, fileName, e.getErrorMessage(), e);
+            throw new RuntimeException("S3 upload failed for " + fileName + ": " + e.getErrorMessage(), e);
         } finally {
             s3.shutdown();
         }

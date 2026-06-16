@@ -84,11 +84,13 @@ public class FileController {
 		File file = new File(System.getProperty("java.io.tmpdir"), fileName);
 		multipartFile.transferTo(file);
 
-		// อัปโหลดไฟล์ไปยัง AWS
-		String uploadedFileName = awsService.uploadFile(prefix, file, isPublic);
-
-		// ลบไฟล์ชั่วคราว
-		Files.delete(file.toPath());
+		// อัปโหลดไฟล์ไปยัง AWS — ลบไฟล์ชั่วคราวเสมอแม้ upload จะ throw
+		String uploadedFileName;
+		try {
+			uploadedFileName = awsService.uploadFile(prefix, file, isPublic);
+		} finally {
+			Files.deleteIfExists(file.toPath());
+		}
 
 		// สร้าง Response
 		Response<String> response = new Response<>();
