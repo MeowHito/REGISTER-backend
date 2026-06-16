@@ -24,6 +24,13 @@ services:
       mysql:    { condition: service_healthy }
       redis:    { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
+    healthcheck:
+      # curl returns 0 for any HTTP response (even 401/403) — non-zero only if connection refused
+      test: ["CMD-SHELL", "curl -s http://localhost:8080/ > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
 
   mysql:
     image: mysql:8.0

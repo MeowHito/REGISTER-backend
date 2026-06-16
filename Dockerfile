@@ -16,8 +16,9 @@ COPY src src
 # Make the Gradle Wrapper executable
 RUN chmod +x gradlew
 
-# Build the application
-RUN ./gradlew build --no-daemon
+# Build the application (cache Gradle deps across rebuilds, skip tests)
+RUN --mount=type=cache,target=/root/.gradle \
+    ./gradlew build --no-daemon -x test
 
 # Use a smaller image to run the application
 FROM amazoncorretto:17
