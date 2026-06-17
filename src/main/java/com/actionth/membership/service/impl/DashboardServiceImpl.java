@@ -567,7 +567,14 @@ public class DashboardServiceImpl implements DashboardService {
         Event event = eventRepository.findByUuid(eventUuid)
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
 
-        Long totalParticipants = dashboardRepository.countByEvent(eventUuid, userUuid, admin);
+        Long totalParticipants;
+        try {
+            totalParticipants = Optional.ofNullable(
+                    dashboardRepository.countByEvent(eventUuid, userUuid, admin)).orElse(0L);
+        } catch (Exception e) {
+            log.error("Failed to count participants by event", e);
+            totalParticipants = 0L;
+        }
 
         List<EventType> eventTypes = eventTypeRepository.findByEventUuid(event.getUuid());
 
@@ -611,17 +618,24 @@ public class DashboardServiceImpl implements DashboardService {
         long paidSum = paidByEventType.values().stream()
                 .mapToLong(Integer::longValue).sum();
 
-        Long paid = Optional.ofNullable(
-                orderRepository.countOrdersByStatus(eventUuid, "SUCCESS")).orElse(0L);
+        Long paid = 0L;
+        Long pending = 0L;
+        Long unpaid = 0L;
+        try {
+            paid = Optional.ofNullable(
+                    orderRepository.countOrdersByStatus(eventUuid, "SUCCESS")).orElse(0L);
 
-        Long pending = Optional.ofNullable(
-                orderRepository.countOrdersByStatus(eventUuid, "PENDING")).orElse(0L);
+            pending = Optional.ofNullable(
+                    orderRepository.countOrdersByStatus(eventUuid, "PENDING")).orElse(0L);
 
-        Long unpaid = Optional.ofNullable(
-                orderRepository.countOrdersByStatuses(
-                        eventUuid,
-                        List.of("FAILED", "CANCELLED", "CANCELED", "CANCEL")))
-                .orElse(0L);
+            unpaid = Optional.ofNullable(
+                    orderRepository.countOrdersByStatuses(
+                            eventUuid,
+                            List.of("FAILED", "CANCELLED", "CANCELED", "CANCEL")))
+                    .orElse(0L);
+        } catch (Exception e) {
+            log.error("Failed to count orders by payment status", e);
+        }
 
         Map<String, Map<String, Integer>> participantWithCapacity = new LinkedHashMap<>();
         quotaByType.forEach((name, quota) -> {
@@ -756,9 +770,15 @@ public class DashboardServiceImpl implements DashboardService {
 
         Map<String, Map<String, Integer>> shirtByEvent = new HashMap<>();
 
-        List<Map<String, Object>> shirtRows = Optional
-                .ofNullable(dashboardRepository.countPaidShirtByEvent(eventUuid, userUuid, admin))
-                .orElse(Collections.emptyList());
+        List<Map<String, Object>> shirtRows;
+        try {
+            shirtRows = Optional
+                    .ofNullable(dashboardRepository.countPaidShirtByEvent(eventUuid, userUuid, admin))
+                    .orElse(Collections.emptyList());
+        } catch (Exception e) {
+            log.error("Failed to count paid shirts by event", e);
+            shirtRows = Collections.emptyList();
+        }
 
         for (Map<String, Object> row : shirtRows) {
             if (row == null)
@@ -784,9 +804,15 @@ public class DashboardServiceImpl implements DashboardService {
 
         Map<String, Map<String, Map<String, Integer>>> shirtByEventType = new HashMap<>();
 
-        List<Map<String, Object>> shirtByTypeRows = Optional
-                .ofNullable(dashboardRepository.countPaidShirtByEventType(eventUuid, userUuid, admin))
-                .orElse(Collections.emptyList());
+        List<Map<String, Object>> shirtByTypeRows;
+        try {
+            shirtByTypeRows = Optional
+                    .ofNullable(dashboardRepository.countPaidShirtByEventType(eventUuid, userUuid, admin))
+                    .orElse(Collections.emptyList());
+        } catch (Exception e) {
+            log.error("Failed to count paid shirts by event type", e);
+            shirtByTypeRows = Collections.emptyList();
+        }
 
         for (Map<String, Object> row : shirtByTypeRows) {
             if (row == null)
@@ -813,9 +839,15 @@ public class DashboardServiceImpl implements DashboardService {
             }
         }
 
-        List<Map<String, Object>> provinceStats = Optional
-                .ofNullable(dashboardRepository.countPaidByProvince(eventUuid, userUuid, admin))
-                .orElse(Collections.emptyList());
+        List<Map<String, Object>> provinceStats;
+        try {
+            provinceStats = Optional
+                    .ofNullable(dashboardRepository.countPaidByProvince(eventUuid, userUuid, admin))
+                    .orElse(Collections.emptyList());
+        } catch (Exception e) {
+            log.error("Failed to count paid participants by province", e);
+            provinceStats = Collections.emptyList();
+        }
 
         Map<String, Integer> provinceCountMap = new HashMap<>();
         for (Map<String, Object> entry : provinceStats) {
@@ -833,17 +865,23 @@ public class DashboardServiceImpl implements DashboardService {
             }
         }
 
-        List<DashboardRegistrationDTO.TimeBucketCountDto> registerDateCountMap = Optional
-                .ofNullable(dashboardRepository.countPaidByRegisterDate(eventUuid, userId, admin))
-                .orElse(Collections.emptyList())
-                .stream()
-                .filter(Objects::nonNull)
-                .map(r -> DashboardRegistrationDTO.TimeBucketCountDto.builder()
-                        .dateTime(r.getDateTime() == null ? null : r.getDateTime().toInstant().atOffset(ZoneOffset.UTC))
-                        .count(Optional.ofNullable(r.getCount()).orElse(0))
-                        .build())
-                .filter(x -> x.getDateTime() != null)
-                .toList();
+        List<DashboardRegistrationDTO.TimeBucketCountDto> registerDateCountMap;
+        try {
+            registerDateCountMap = Optional
+                    .ofNullable(dashboardRepository.countPaidByRegisterDate(eventUuid, userId, admin))
+                    .orElse(Collections.emptyList())
+                    .stream()
+                    .filter(Objects::nonNull)
+                    .map(r -> DashboardRegistrationDTO.TimeBucketCountDto.builder()
+                            .dateTime(r.getDateTime() == null ? null : r.getDateTime().toInstant().atOffset(ZoneOffset.UTC))
+                            .count(Optional.ofNullable(r.getCount()).orElse(0))
+                            .build())
+                    .filter(x -> x.getDateTime() != null)
+                    .toList();
+        } catch (Exception e) {
+            log.error("Failed to count paid participants by register date", e);
+            registerDateCountMap = Collections.emptyList();
+        }
 
         OffsetDateTime registrationOpen = toUtc(event.getStartRegistrationDate());
         OffsetDateTime registrationClose = toUtc(event.getEndRegistrationDate());
