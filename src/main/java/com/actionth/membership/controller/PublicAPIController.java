@@ -174,6 +174,16 @@ public class PublicAPIController {
             HttpServletResponse servletResponse) {
         UserDto user = userService.createUser(userDto);
 
+        // Organizers register in a pending state and must be approved (activated) by an
+        // admin before they can sign in. Do not issue an auth token for pending accounts.
+        boolean pendingApproval = "organizer".equalsIgnoreCase(userDto.getRole());
+        if (pendingApproval) {
+            return new Response<>(
+                    Map.of("user", user, "pendingApproval", true),
+                    "Registration received. Awaiting admin approval.",
+                    true);
+        }
+
         boolean isProd = !"DEV".equalsIgnoreCase(Optional.ofNullable(appEnv).orElse("DEV"));
         ResponseCookie jwtCookie = ResponseCookie
                 .from("access_token", userService.getToken(user))

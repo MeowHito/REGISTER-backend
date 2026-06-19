@@ -57,6 +57,8 @@ Thumbs.db
 build/
 bin/
 .vscode/settings.json
+# Local-only: machine-specific JDK path (org.gradle.java.home)
+gradle.properties
 
 # Local config with secrets (keep the .example template tracked)
 src/main/resources/application-local.yaml

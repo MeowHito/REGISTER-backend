@@ -158,6 +158,9 @@ public class UserServiceImpl implements UserService {
         } else if ("organizer".equalsIgnoreCase(userDto.getRole())) {
             role = roleRepository.findByRole("organizer")
                     .orElseThrow(() -> new IllegalArgumentException("Role not found: organizer"));
+            // Organizers must be approved (activated) by an admin before they can sign in
+            // and access the back office. They start in a pending (inactive) state.
+            user.setActive(false);
         } else if ("admin".equalsIgnoreCase(userDto.getRole())) {
             role = roleRepository.findByRole("admin")
                     .orElseThrow(() -> new IllegalArgumentException("Role not found: admin"));
