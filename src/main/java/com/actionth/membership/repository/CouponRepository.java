@@ -64,12 +64,18 @@ public interface CouponRepository extends JpaRepository<Coupon, Integer>, JpaSpe
 
     void deleteByBucketNameAndStatusAndRedeemByIsNull(String bucketName, String status);
 
+    // One representative coupon per bucketName. Selecting the full entity while
+    // grouping only by bucketName violates MySQL ONLY_FULL_GROUP_BY (→ HTTP 500),
+    // so pick the max id per bucket in a subquery and fetch those rows.
     @Query("""
                 SELECT c FROM Coupon c
-                WHERE c.event.uuid IN :eventIds
-                AND c.type IN :types
-                AND c.status = :status
-                GROUP BY c.bucketName
+                WHERE c.id IN (
+                    SELECT MAX(c2.id) FROM Coupon c2
+                    WHERE c2.event.uuid IN :eventIds
+                    AND c2.type IN :types
+                    AND c2.status = :status
+                    GROUP BY c2.bucketName
+                )
             """)
     List<Coupon> findGroupedByBucketNameByEventIdsAndTypeAndStatus(
             @Param("eventIds") List<String> eventIds,
