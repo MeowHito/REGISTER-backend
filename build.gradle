@@ -111,6 +111,14 @@ dependencies {
     testImplementation 'org.junit.platform:junit-platform-launcher:1.5.2'
 }
 
+// Without useJUnitPlatform() Gradle discovers no JUnit 5 tests and `test` passes silently.
+// contextLoads boots the whole app, so it needs `docker compose up -d`; the default
+// "local" profile uses ddl-auto=create and wipes the local database on each run.
+tasks.named('test') {
+    useJUnitPlatform()
+    systemProperty 'spring.profiles.active', System.getenv('SPRING_PROFILES_ACTIVE') ?: 'local'
+}
+
 // WAR Configuration
 bootWar {
     // Optional configuration

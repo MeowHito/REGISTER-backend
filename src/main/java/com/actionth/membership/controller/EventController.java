@@ -1,5 +1,6 @@
 package com.actionth.membership.controller;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.actionth.membership.model.User;
 import com.actionth.membership.model.dto.EventDto;
 import com.actionth.membership.model.dto.EventViewDto;
@@ -31,6 +32,7 @@ public class EventController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORGANIZER')")
     public Response<EventDto> createEvent(@RequestBody EventDto dto) {
         return new Response<>(eventService.createEvent(dto), "Event created successfully", true);
     }

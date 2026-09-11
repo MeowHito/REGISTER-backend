@@ -1,5 +1,7 @@
 package com.actionth.membership.service.impl;
 
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.Authentication;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -198,6 +200,7 @@ public class EventServiceImpl implements EventService {
 	public EventDto updateEvent(EventDto dto) {
 		Event entity = eventRepository.findByUuid(dto.getId())
 				.orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+		assertCanModifyEvent(entity, false);
 
 		validateEventModification(entity, dto);
 
@@ -365,6 +368,7 @@ public class EventServiceImpl implements EventService {
 	public void updateStatus(EventDto dto) {
 		Event entity = eventRepository.findByUuid(dto.getId())
 				.orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+		assertCanModifyEvent(entity, false);
 
 		entity.setIsDraft(dto.getIsDraft());
 		eventRepository.save(entity);
@@ -372,15 +376,52 @@ public class EventServiceImpl implements EventService {
 
 	@Override
 	public void deleteEvent(String uuid, String mode) {
+		Event entity = eventRepository.findByUuid(uuid)
+				.orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+		assertCanModifyEvent(entity, true);
+
 		if ("hard".equals(mode)) {
-			Event entity = eventRepository.findByUuid(uuid)
-					.orElseThrow(() -> new ResourceNotFoundException("Event not found"));
 			eventRepository.delete(entity);
 		} else if ("soft".equals(mode)) {
-			Event entity = eventRepository.findByUuid(uuid)
-					.orElseThrow(() -> new ResourceNotFoundException("Event not found"));
 			entity.setActive(false);
 			eventRepository.save(entity);
+		}
+	}
+
+	/**
+	 * Mirrors the back-office UI rules (eventList canUpdateRecord / canDelete):
+	 * admins may do anything; otherwise update needs ownership or canUpdate on the
+	 * caller's EventPermission, and delete needs canDelete.
+	 */
+	private void assertCanModifyEvent(Event event, boolean deleting) {
+		Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+		if (auth != null && auth.getAuthorities().stream()
+				.anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()))) {
+			return;
+		}
+
+		Integer userId = contextUtils.getCurrentUserIdOrNull();
+		if (userId == null) {
+			throw new org.springframework.security.access.AccessDeniedException("Unauthenticated");
+		}
+
+		EventPermission permission = event.getEventPermissions().stream()
+				.filter(p -> p.getUser() != null && userId.equals(p.getUser().getId())
+						&& !Boolean.FALSE.equals(p.getActive()))
+				.findFirst()
+				.orElse(null);
+
+		boolean allowed;
+		if (deleting) {
+			allowed = permission != null && Boolean.TRUE.equals(permission.getCanDelete());
+		} else {
+			boolean isOwner = event.getOrganizer() != null && userId.equals(event.getOrganizer().getId());
+			allowed = isOwner || (permission != null && Boolean.TRUE.equals(permission.getCanUpdate()));
+		}
+
+		if (!allowed) {
+			throw new org.springframework.security.access.AccessDeniedException(
+					"No permission to " + (deleting ? "delete" : "update") + " this event");
 		}
 	}
 
