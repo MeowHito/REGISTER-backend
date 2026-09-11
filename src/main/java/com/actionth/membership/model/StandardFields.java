@@ -8,7 +8,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
 import java.time.OffsetDateTime;
@@ -26,6 +28,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 @MappedSuperclass
 @NoArgsConstructor
 @AllArgsConstructor
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class StandardFields {
 
   @Id
@@ -34,6 +37,7 @@ public class StandardFields {
   protected Integer id;
 
   @Column(nullable = false, unique = true, length = 36)
+  @EqualsAndHashCode.Include
   protected String uuid;
 
   @Builder.Default
@@ -52,12 +56,14 @@ public class StandardFields {
   @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
   @ManyToOne
   @JoinColumn(name = "createdBy")
+  @ToString.Exclude
   protected User createdBy;
 
   @LastModifiedBy
   @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
   @ManyToOne
   @JoinColumn(name = "updatedBy")
+  @ToString.Exclude
   protected User updatedBy;
 
   @PrePersist

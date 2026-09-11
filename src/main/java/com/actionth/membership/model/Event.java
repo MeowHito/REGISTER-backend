@@ -7,6 +7,7 @@ import com.fasterxml.jackson.annotation.JsonManagedReference;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -31,7 +32,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 @SuperBuilder
 @Table(name = "event")
 @JsonIgnoreProperties(value = { "hibernateLazyInitializer", "handler" }, ignoreUnknown = true)
-@EqualsAndHashCode(callSuper = true)
+@EqualsAndHashCode(callSuper = true, onlyExplicitlyIncluded = true)
 public class Event extends StandardFields {
     private String name;
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
@@ -74,47 +75,55 @@ public class Event extends StandardFields {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "organizerId")
     @JsonBackReference("user-event")
+    @ToString.Exclude
     private User organizer;
 
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @LazyCollection(LazyCollectionOption.FALSE)
     @JsonManagedReference("event-conditions")
     @Builder.Default
+    @ToString.Exclude
     private List<EventCondition> eventConditions = new ArrayList<>();
 
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @LazyCollection(LazyCollectionOption.FALSE)
     @JsonManagedReference("event-details")
     @Builder.Default
+    @ToString.Exclude
     private List<EventDetail> eventDetails = new ArrayList<>();
 
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @LazyCollection(LazyCollectionOption.FALSE)
     @JsonManagedReference("event-paymentTypes")
     @Builder.Default
+    @ToString.Exclude
     private List<PaymentType> paymentTypes = new ArrayList<>();
 
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @LazyCollection(LazyCollectionOption.FALSE)
     @JsonManagedReference("event-eventTypes")
     @Builder.Default
+    @ToString.Exclude
     private List<EventType> eventTypes = new ArrayList<>();
 
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @LazyCollection(LazyCollectionOption.FALSE)
     @JsonManagedReference("event-shirtTypes")
     @Builder.Default
+    @ToString.Exclude
     private List<ShirtType> shirtTypes = new ArrayList<>();
 
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @LazyCollection(LazyCollectionOption.FALSE)
     @JsonManagedReference("event-selectionFields")
     @Builder.Default
+    @ToString.Exclude
     private List<EventSelectionField> selectionFields = new ArrayList<>();
 
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @LazyCollection(LazyCollectionOption.FALSE)
     @JsonManagedReference("event-eventPermissions")
     @Builder.Default
+    @ToString.Exclude
     private List<EventPermission> eventPermissions = new ArrayList<>();
 }

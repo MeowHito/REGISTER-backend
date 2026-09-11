@@ -6,23 +6,20 @@ import com.actionth.membership.model.Orders;
 import com.actionth.membership.model.dto.OrderUpdateResponse;
 
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RMap;
+import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 
-/**
- * Payment Gateway Service — facade that delegates to provider-specific
- * services.
- *
- * <ul>
- * <li><b>SCB</b> → QR Code (PromptPay), Slip Verify, Alipay+, WeChatPay</li>
- * <li><b>2C2P</b> → Credit/Debit Card, E-wallet (LINE Pay, TrueMoney)</li>
- * </ul>
- */
 @Service
 @Slf4j
 public class PaymentGatewayService {
@@ -30,13 +27,20 @@ public class PaymentGatewayService {
     private final SCBPaymentService scbPaymentService;
     private final TwoCTwoPPaymentService twoCTwoPPaymentService;
     private final PaymentConfig paymentConfig;
+    private final RedissonClient redissonClient;
+
+    private static final String QR_CACHE_PREFIX = "qr:scb:";
+    private static final String QR_LOCK_PREFIX = "qr:scb:lock:";
+    private static final long QR_EXPIRE_MINUTES = 10L;
 
     public PaymentGatewayService(SCBPaymentService scbPaymentService,
             TwoCTwoPPaymentService twoCTwoPPaymentService,
-            PaymentConfig paymentConfig) {
+            PaymentConfig paymentConfig,
+            RedissonClient redissonClient) {
         this.scbPaymentService = scbPaymentService;
         this.twoCTwoPPaymentService = twoCTwoPPaymentService;
         this.paymentConfig = paymentConfig;
+        this.redissonClient = redissonClient;
     }
 
     public OrderUpdateResponse.PaymentData initiatePayment(Orders order) {
@@ -76,6 +80,54 @@ public class PaymentGatewayService {
     }
 
     private OrderUpdateResponse.PaymentData initiateQRCodePayment(Orders order, String orderNo, String amount) {
+        RMap<String, String> cache = redissonClient.getMap(QR_CACHE_PREFIX + orderNo);
+
+        OrderUpdateResponse.PaymentData cached = readCachedQr(cache, amount, orderNo);
+        if (cached != null) {
+            return cached;
+        }
+
+        RLock lock = redissonClient.getLock(QR_LOCK_PREFIX + orderNo);
+        boolean locked = false;
+        try {
+            locked = lock.tryLock(5, 10, TimeUnit.SECONDS);
+            if (locked) {
+                cached = readCachedQr(cache, amount, orderNo);
+                if (cached != null) {
+                    return cached;
+                }
+            }
+            return generateAndCacheQr(order, orderNo, amount, cache);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return generateAndCacheQr(order, orderNo, amount, cache);
+        } finally {
+            if (locked && lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
+        }
+    }
+
+    private OrderUpdateResponse.PaymentData readCachedQr(RMap<String, String> cache, String amount, String orderNo) {
+        try {
+            String cachedQr = cache.get("qrImage");
+            String cachedAmount = cache.get("amount");
+            if (cachedQr != null && !cachedQr.isBlank() && amount.equals(cachedAmount)) {
+                log.info("[SCB QR] Reusing cached QR for orderNo={}, amount={}", orderNo, amount);
+                return OrderUpdateResponse.PaymentData.builder()
+                        .paymentMethod("qrcode")
+                        .qrImage(cachedQr)
+                        .refNo(orderNo)
+                        .build();
+            }
+        } catch (Exception e) {
+            log.warn("[SCB QR] Failed to read cached QR for orderNo={}, regenerating", orderNo, e);
+        }
+        return null;
+    }
+
+    private OrderUpdateResponse.PaymentData generateAndCacheQr(Orders order, String orderNo, String amount,
+            RMap<String, String> cache) {
         String ref2 = generateRef2();
         String ref3 = paymentConfig.getRef3();
 
@@ -97,6 +149,8 @@ public class PaymentGatewayService {
             Map<?, ?> data = (response.get("data") instanceof Map<?, ?> m) ? m : null;
             String qrImage = data != null ? String.valueOf(data.get("qrImage")) : null;
 
+            cacheQr(cache, orderNo, qrImage, ref2, amount, order);
+
             return OrderUpdateResponse.PaymentData.builder()
                     .paymentMethod("qrcode")
                     .qrImage(qrImage)
@@ -105,6 +159,34 @@ public class PaymentGatewayService {
         }
 
         throw new BusinessException("Failed to create QR Code: " + response.get("message"));
+    }
+
+    private void cacheQr(RMap<String, String> cache, String orderNo, String qrImage, String ref2, String amount,
+            Orders order) {
+        if (qrImage == null || qrImage.isBlank() || "null".equals(qrImage)) {
+            return;
+        }
+        try {
+            long ttlSeconds = computeQrTtlSeconds(order);
+            if (ttlSeconds <= 0) {
+                return;
+            }
+            cache.clear();
+            cache.put("qrImage", qrImage);
+            cache.put("ref2", ref2);
+            cache.put("amount", amount);
+            cache.expire(Duration.ofSeconds(ttlSeconds));
+        } catch (Exception e) {
+            log.warn("[SCB QR] Failed to cache QR for orderNo={}", orderNo, e);
+        }
+    }
+
+    private long computeQrTtlSeconds(Orders order) {
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime maxExpiry = now.plusMinutes(QR_EXPIRE_MINUTES);
+        OffsetDateTime due = order.getPaymentDueDatetime();
+        OffsetDateTime effective = (due != null && due.isBefore(maxExpiry)) ? due : maxExpiry;
+        return Duration.between(now, effective).getSeconds();
     }
 
     private OrderUpdateResponse.PaymentData initiateEwalletQRPayment(Orders order, String orderNo, String amount, String tranType) {

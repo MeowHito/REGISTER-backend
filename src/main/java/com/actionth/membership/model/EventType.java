@@ -9,6 +9,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -32,12 +33,13 @@ import java.util.List;
 @SuperBuilder
 @Table(name = "eventType")
 @JsonIgnoreProperties(value = { "hibernateLazyInitializer", "handler" }, ignoreUnknown = true)
-@EqualsAndHashCode(callSuper = true)
+@EqualsAndHashCode(callSuper = true, onlyExplicitlyIncluded = true)
 public class EventType extends StandardFields {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "eventId", nullable = false)
     @OnDelete(action = OnDeleteAction.CASCADE)
     @JsonBackReference("event-eventTypes")
+    @ToString.Exclude
     private Event event;
 
     private String name;
@@ -52,18 +54,21 @@ public class EventType extends StandardFields {
     @LazyCollection(LazyCollectionOption.FALSE)
     @JsonManagedReference("eventType-pricing")
     @Builder.Default
+    @ToString.Exclude
     private List<Pricing> pricing = new ArrayList<>();
 
     @OneToMany(mappedBy = "eventType", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @LazyCollection(LazyCollectionOption.FALSE)
     @JsonManagedReference("eventType-ageGroups")
     @Builder.Default
+    @ToString.Exclude
     private List<AgeGroup> ageGroups = new ArrayList<>();
 
     @OneToMany(mappedBy = "eventType", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @LazyCollection(LazyCollectionOption.FALSE)
     @JsonManagedReference("eventType-selectionFields")
     @Builder.Default
+    @ToString.Exclude
     private List<EventSelectionField> selectionFields = new ArrayList<>();
 
     private Boolean isTeam;

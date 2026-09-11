@@ -7,6 +7,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -23,17 +24,19 @@ import javax.persistence.*;
 @SuperBuilder
 @Table(name = "eventSelectionField")
 @JsonIgnoreProperties(value = { "hibernateLazyInitializer", "handler" }, ignoreUnknown = true)
-@EqualsAndHashCode(callSuper = true)
+@EqualsAndHashCode(callSuper = true, onlyExplicitlyIncluded = true)
 public class EventSelectionField extends StandardFields {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "eventId")
     @JsonBackReference("event-selectionFields")
+    @ToString.Exclude
     private Event event;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "eventTypeId")
     @JsonBackReference("eventType-selectionFields")
+    @ToString.Exclude
     private EventType eventType;
 
     private String title;
@@ -47,6 +50,7 @@ public class EventSelectionField extends StandardFields {
 
     @OneToMany(mappedBy = "selectionField", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
+    @ToString.Exclude
     private List<EventSelectionOption> options = new ArrayList<>();
 
 }

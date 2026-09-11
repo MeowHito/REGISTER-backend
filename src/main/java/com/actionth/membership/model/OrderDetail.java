@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
 import javax.persistence.*;
@@ -28,29 +29,34 @@ import org.springframework.format.annotation.DateTimeFormat;
 @SuperBuilder
 @Table(name = "orderDetail")
 @JsonIgnoreProperties({ "hibernateLazyInitializer", "handler" })
-@EqualsAndHashCode(callSuper = true)
+@EqualsAndHashCode(callSuper = true, onlyExplicitlyIncluded = true)
 public class OrderDetail extends StandardFields {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "orderId", nullable = false)
     @OnDelete(action = OnDeleteAction.CASCADE)
     @JsonBackReference("order-orderDetail")
+    @ToString.Exclude
     private Orders order;
 
     @ManyToOne
     @JoinColumn(name = "eventTypeId")
+    @ToString.Exclude
     private EventType eventType;
 
     @ManyToOne
     @JoinColumn(name = "shirtTypeId")
+    @ToString.Exclude
     private ShirtType shirtType;
 
     @ManyToOne
     @JoinColumn(name = "shirtSizeId")
+    @ToString.Exclude
     private ShirtSize shirtSize;
 
     @ManyToOne
     @JoinColumn(name = "pricingId")
+    @ToString.Exclude
     private Pricing pricing;
 
     private Boolean isSelf;
