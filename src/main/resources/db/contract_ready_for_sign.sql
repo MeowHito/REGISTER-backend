@@ -5,4 +5,14 @@
 ALTER TABLE `contract`
   ADD COLUMN `isReadyForSign` bit(1) DEFAULT NULL AFTER `zipcode`;
 
--- Existing signed/completed contracts keep the default NULL (treated as draft).
+-- Backfill: organizers only see contracts with isReadyForSign = 1
+-- (ContractServiceImpl list filter). Without this, every pre-existing contract
+-- disappears from the organizer's list, including already-signed ones.
+-- Contracts that already have a document, a signature, or an uploaded copy were
+-- visible to the organizer before this change, so keep them visible.
+UPDATE `contract`
+   SET `isReadyForSign` = 1
+ WHERE `isReadyForSign` IS NULL
+   AND ((`contractPath` IS NOT NULL AND `contractPath` <> '')
+        OR `customerSignature` IS NOT NULL
+        OR `isUploadContract` = 1);
