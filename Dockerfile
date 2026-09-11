@@ -16,6 +16,9 @@ COPY src src
 # Make the Gradle Wrapper executable
 RUN chmod +x gradlew
 
+# gradlew needs xargs; amazoncorretto:17 is now Amazon Linux 2023 minimal without findutils
+RUN yum install -y findutils && yum clean all
+
 # Build the application (cache Gradle deps across rebuilds, skip tests)
 RUN --mount=type=cache,target=/root/.gradle \
     ./gradlew build --no-daemon -x test
