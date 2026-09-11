@@ -47,7 +47,7 @@ public class JobController {
      * Requires admin role
      */
     @PostMapping("/trigger/update-overdue-payments")
-    @PreAuthorize("hasRole('admin')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<JobTriggerResponse> triggerUpdateOverduePaymentsJob() {
         try {
             log.info("Manual trigger requested for UpdateOverduePaymentsJob at {}", OffsetDateTime.now());
@@ -83,7 +83,7 @@ public class JobController {
      * Get job status and next execution time
      */
     @PostMapping("/status/update-overdue-payments")
-    @PreAuthorize("hasRole('admin')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<JobStatusResponse> getJobStatus() {
         try {
             JobKey jobKey = new JobKey("updateOverduePaymentsJob");
@@ -126,7 +126,7 @@ public class JobController {
      * Get comprehensive monitoring information for all jobs
      */
     @GetMapping("/monitoring")
-    @PreAuthorize("hasRole('admin')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<JobMonitoringResponse> getAllJobsMonitoring() {
         try {
             List<JobMonitoringResponse.JobInfo> jobInfoList = new ArrayList<>();
@@ -203,7 +203,7 @@ public class JobController {
      * Get execution history from database
      */
     @GetMapping("/execution-history")
-    @PreAuthorize("hasRole('admin')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<JobExecutionHistoryResponse> getExecutionHistory() {
         try {
             List<JobExecutionHistoryResponse.ExecutionRecord> executions = 
@@ -233,7 +233,7 @@ public class JobController {
      * Requires admin role
      */
     @PostMapping("/trigger/resend-failed-emails")
-    @PreAuthorize("hasRole('admin')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<JobTriggerResponse> triggerResendFailedEmailsJob() {
         try {
             log.info("Manual trigger requested for ResendFailedEmailsJob at {}", OffsetDateTime.now());
@@ -269,7 +269,7 @@ public class JobController {
      * Get job status and next execution time for resend failed emails job
      */
     @PostMapping("/status/resend-failed-emails")
-    @PreAuthorize("hasRole('admin')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<JobStatusResponse> getResendFailedEmailsJobStatus() {
         try {
             JobKey jobKey = new JobKey("resendFailedEmailsJob");

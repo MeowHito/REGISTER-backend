@@ -239,44 +239,36 @@ public class EmailLogService {
         });
     }
 
-    /**
-     * Get email logs with pagination
-     */
     public Page<EmailLog> getEmailLogs(Pageable pageable) {
         return emailLogRepository.findAll(pageable);
     }
 
-    /**
-     * Get email logs by order ID
-     */
     public Page<EmailLog> getEmailLogsByOrderId(String orderId, Pageable pageable) {
         return emailLogRepository.findByOrderId(orderId, pageable);
     }
 
-    /**
-     * Get email logs by status
-     */
     public Page<EmailLog> getEmailLogsByStatus(String status, Pageable pageable) {
         return emailLogRepository.findBySendStatus(status, pageable);
     }
 
-    /**
-     * Get email logs by recipient
-     */
     public Page<EmailLog> getEmailLogsByRecipient(String email, Pageable pageable) {
         return emailLogRepository.findByRecipientTo(email, pageable);
     }
 
-    /**
-     * Get email log by ID
-     */
     public EmailLog getEmailLogById(Long id) {
         return emailLogRepository.findById(id).orElse(null);
     }
 
-    /**
-     * Get email statistics
-     */
+    @Transactional
+    public EmailLog updateRecipient(Long id, String recipientTo) {
+        EmailLog emailLog = emailLogRepository.findById(id).orElse(null);
+        if (emailLog == null) {
+            return null;
+        }
+        emailLog.setRecipientTo(recipientTo);
+        return emailLogRepository.save(emailLog);
+    }
+
     public EmailLogStats getStats() {
         EmailLogStats stats = new EmailLogStats();
         stats.setTotalSent(emailLogRepository.countBySendStatus(STATUS_SENT));

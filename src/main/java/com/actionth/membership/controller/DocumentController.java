@@ -76,6 +76,28 @@ public class DocumentController {
         return Optional.ofNullable(value).orElse("");
     }
 
+    public String cleanText(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replaceAll("(?i)\\bundefined\\b", "")
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
+    public String cleanTextOrNull(String value) {
+        String cleaned = cleanText(value);
+        return cleaned.isEmpty() ? null : cleaned;
+    }
+
+    public boolean isAbsoluteUrl(String value) {
+        if (value == null) {
+            return false;
+        }
+        String lower = value.toLowerCase();
+        return lower.startsWith("http://") || lower.startsWith("https://");
+    }
+
     @PostMapping("/getContractDocument")
     public ResponseEntity<byte[]> getContractDocument(
             @RequestHeader Map<String, String> headers,
@@ -113,7 +135,9 @@ public class DocumentController {
 
             String providerSignature = userService.getApproverSignatureImg();
             if (providerSignature == null || providerSignature.isEmpty()) {
-                paramMap.put("providerSignature", optString(providerSignature));
+                paramMap.put("providerSignature", "");
+            } else if (isAbsoluteUrl(providerSignature)) {
+                paramMap.put("providerSignature", providerSignature);
             } else {
                 String prefixProfile = "userData";
                 String publicUserProfileUrl = awsService.getPublicUrl(prefixProfile, providerSignature);
@@ -121,7 +145,9 @@ public class DocumentController {
             }
             String customerSignature = contract.getCustomerSignature();
             if (customerSignature == null || customerSignature.isEmpty()) {
-                paramMap.put("customerSignature", optString(customerSignature));
+                paramMap.put("customerSignature", "");
+            } else if (isAbsoluteUrl(customerSignature)) {
+                paramMap.put("customerSignature", customerSignature);
             } else {
                 String prefixContract = "contract";
                 String publicCustomerSignatureUrl = awsService.getPublicUrl(prefixContract, customerSignature);
@@ -132,17 +158,17 @@ public class DocumentController {
             paramMap.put("runNo", optString(contract.getRunNo()));
             paramMap.put("contractDate", optString(contract.getContractDate()));
             paramMap.put("detail", optString(contract.getDetail()));
-            paramMap.put("customerCompany", optString(contract.getCustomerCompany()));
-            paramMap.put("organizer", optString(contract.getOrganizer()));
-            paramMap.put("tel", optString(contract.getTel()));
-            paramMap.put("address", optString(contract.getAddress()));
-            paramMap.put("taxNo", optString(contract.getTaxNo()));
-            paramMap.put("event", optString(contract.getEvent()));
-            paramMap.put("providerName", optString(contract.getProviderName()));
-            paramMap.put("providerPosition", optString(contract.getProviderPosition()));
+            paramMap.put("customerCompany", cleanText(contract.getCustomerCompany()));
+            paramMap.put("organizer", cleanText(contract.getOrganizer()));
+            paramMap.put("tel", cleanText(contract.getTel()));
+            paramMap.put("address", cleanText(contract.getAddress()));
+            paramMap.put("taxNo", cleanText(contract.getTaxNo()));
+            paramMap.put("event", cleanText(contract.getEvent()));
+            paramMap.put("providerName", cleanText(contract.getProviderName()));
+            paramMap.put("providerPosition", cleanText(contract.getProviderPosition()));
             paramMap.put("customerSeal", optString(contract.getCustomerSeal()));
-            paramMap.put("customerName", contract.getCustomerName());
-            paramMap.put("customerPosition", contract.getCustomerPosition());
+            paramMap.put("customerName", cleanTextOrNull(contract.getCustomerName()));
+            paramMap.put("customerPosition", cleanTextOrNull(contract.getCustomerPosition()));
 
             data = reportService.generateReport(template, paramMap);
 

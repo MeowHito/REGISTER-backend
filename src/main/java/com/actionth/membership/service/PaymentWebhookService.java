@@ -38,7 +38,9 @@ public class PaymentWebhookService {
     private final AWSService awsService;
     private final ObjectMapper objectMapper;
     private final RedissonClient redissonClient;
+    private final DistributedLockService distributedLockService;
 
+    public static final String ORDER_PAY_LOCK_PREFIX = "order:pay:";
     private static final String WEBHOOK_DEDUP_PREFIX = "webhook:dedup:";
     private static final Duration WEBHOOK_DEDUP_TTL = Duration.ofHours(1);
 
@@ -97,6 +99,13 @@ public class PaymentWebhookService {
     }
 
     /**
+     * Whether any webhook log already exists for this order key.
+     */
+    public boolean hasWebhookForOrderKey(String key) {
+        return !getPayloadsByOrderKey(key).isEmpty();
+    }
+
+    /**
      * Process SCB webhook payload
      */
     public Map<String, Object> processSCBWebhook(Map<String, Object> payload) throws Exception {
@@ -106,24 +115,33 @@ public class PaymentWebhookService {
         String qrId = safeString(payload.get("qrId")); // Alipay/WeChatPay
         Double webhookAmount = parseDouble(payload.get("amount"));
 
-        if (!isBlank(transactionId) && !tryClaimWebhook("SCB", transactionId)) {
-            log.info("[SCB webhook] Duplicate transactionId={}, skipping", transactionId);
-            return createAckResponse(transactionId);
-        }
-
         String orderNoFromQr = extractOrderNoFromQrId(qrId);
         String orderKey = firstNonBlank(trimToNull(ref1), trimToNull(orderNoFromQr));
 
+        if (isBlank(orderKey)) {
+            log.warn("[SCB webhook] Missing order key. txnId={}, ref1={}, qrId={}", transactionId, ref1, qrId);
+            if (!isBlank(transactionId)) {
+                tryClaimWebhook("SCB", transactionId);
+            }
+            return createAckResponse(transactionId);
+        }
+
+        return distributedLockService.executeWithLock(ORDER_PAY_LOCK_PREFIX + orderKey, () -> {
+            if (!isBlank(transactionId) && !tryClaimWebhook("SCB", transactionId)) {
+                log.info("[SCB webhook] Duplicate transactionId={}, skipping", transactionId);
+                return createAckResponse(transactionId);
+            }
+            return settleScbWebhook(payload, jsonPayload, transactionId, ref1, qrId, webhookAmount, orderKey);
+        });
+    }
+
+    private Map<String, Object> settleScbWebhook(Map<String, Object> payload, String jsonPayload,
+            String transactionId, String ref1, String qrId, Double webhookAmount, String orderKey) {
         Orders order = null;
         String logType = WebhookLogType.WEBHOOK;
         String reasonType = null;
 
         try {
-            if (isBlank(orderKey)) {
-                log.warn("[SCB webhook] Missing order key. txnId={}, ref1={}, qrId={}", transactionId, ref1, qrId);
-                return createAckResponse(transactionId);
-            }
-
             order = orderRepository.findByOrderNo(orderKey).orElse(null);
 
             if (order == null) {
@@ -216,17 +234,29 @@ public class PaymentWebhookService {
 
         String earlyTxnId = safeString(normalized.get("tranRef"));
 
-        if (!isBlank(earlyTxnId) && !tryClaimWebhook("2C2P", earlyTxnId)) {
-            log.info("[2C2P] Duplicate tranRef={}, skipping", earlyTxnId);
-            return Map.of("ok", true, "message", "Duplicate webhook, skipped");
-        }
-
         String orderRef = firstNonBlank(
                 safeString(normalized.get("orderNo")),
                 safeString(normalized.get("invoiceNo")),
                 safeString(normalized.get("referenceNo")),
                 safeString(normalized.get("tranRef")));
 
+        if (isBlank(orderRef)) {
+            throw new IllegalArgumentException("missing required fields (orderRef)");
+        }
+
+        String jsonPayload = objectMapper.writeValueAsString(normalized);
+
+        return distributedLockService.executeWithLock(ORDER_PAY_LOCK_PREFIX + orderRef, () -> {
+            if (!isBlank(earlyTxnId) && !tryClaimWebhook("2C2P", earlyTxnId)) {
+                log.info("[2C2P] Duplicate tranRef={}, skipping", earlyTxnId);
+                return Map.of("ok", true, "message", "Duplicate webhook, skipped");
+            }
+            return settle2C2PWebhook(normalized, jsonPayload, orderRef);
+        });
+    }
+
+    private Map<String, Object> settle2C2PWebhook(Map<String, Object> normalized, String jsonPayload,
+            String orderRef) {
         String txnId = firstNonBlank(safeString(normalized.get("tranRef")), orderRef);
 
         String respCode = safeString(normalized.get("respCode"));
@@ -234,11 +264,6 @@ public class PaymentWebhookService {
         Double amount = parseDouble(normalized.get("amount"));
         String currency = safeString(normalized.get("currencyCode"));
 
-        if (isBlank(orderRef)) {
-            throw new IllegalArgumentException("missing required fields (orderRef)");
-        }
-
-        String jsonPayload = objectMapper.writeValueAsString(normalized);
         Orders order = null;
         String logType = WebhookLogType.WEBHOOK;
         String reasonType = null;
@@ -401,11 +426,6 @@ public class PaymentWebhookService {
         }
     }
 
-    /**
-     * Check if there are any valid webhook logs for the order and update status if
-     * found.
-     * This replaces the frontend polling logic.
-     */
     public boolean verifyAndSettleFromLogs(String orderNo) {
         Orders order = orderRepository.findByOrderNo(orderNo).orElse(null);
         if (order == null)
@@ -413,6 +433,24 @@ public class PaymentWebhookService {
 
         if (PaymentStatus.SUCCESS.toString().equalsIgnoreCase(order.getPaymentStatus())) {
             return true;
+        }
+
+        return distributedLockService.executeWithLock(ORDER_PAY_LOCK_PREFIX + orderNo, () -> settleFromLogs(orderNo));
+    }
+
+    private boolean settleFromLogs(String orderNo) {
+        Orders order = orderRepository.findByOrderNo(orderNo).orElse(null);
+        if (order == null)
+            return false;
+
+        if (PaymentStatus.SUCCESS.toString().equalsIgnoreCase(order.getPaymentStatus())) {
+            return true;
+        }
+
+        if (!PaymentStatus.PENDING.toString().equalsIgnoreCase(order.getPaymentStatus())) {
+            log.warn("[settle] Order {} not PENDING (status={}), skipping log-settle",
+                    orderNo, order.getPaymentStatus());
+            return false;
         }
 
         List<String> payloads = getWebhookPayloadsByOrderKey(orderNo);
@@ -1027,5 +1065,30 @@ public class PaymentWebhookService {
         return null;
     }
 
+    public String resolveMethodFromWebhookLog(String provider, String payloadJson) {
+        try {
+            Map<String, Object> map = objectMapper.readValue(payloadJson,
+                    new TypeReference<Map<String, Object>>() {});
+            if (PaymentProvider.SCB.equalsIgnoreCase(provider)) {
+                return resolveScbPaymentMethod(safeString(map.get("billPaymentRef1")),
+                        safeString(map.get("qrId")), map);
+            }
+            return resolve2c2pPaymentMethod(map);
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
+    public boolean isSuccessfulPaymentLog(String provider, String payloadJson) {
+        if (PaymentProvider.SCB.equalsIgnoreCase(provider)) {
+            return true;
+        }
+        try {
+            Map<String, Object> map = objectMapper.readValue(payloadJson,
+                    new TypeReference<Map<String, Object>>() {});
+            return "0000".equals(safeString(map.get("respCode")));
+        } catch (Exception e) {
+            return false;
+        }
+    }
 }

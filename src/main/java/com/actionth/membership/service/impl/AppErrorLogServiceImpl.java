@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import javax.servlet.http.HttpServletRequest;
 import java.time.OffsetDateTime;
 import java.util.*;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -31,6 +32,43 @@ public class AppErrorLogServiceImpl implements AppErrorLogService {
     private static final int MAX_STACK_LENGTH = 5000;
     private static final int MAX_RESPONSE_DATA_LENGTH = 10000;
     private static final int MAX_REQUEST_DATA_LENGTH = 10000;
+
+    private static final Pattern SENSITIVE_JSON_FIELD = Pattern.compile(
+            "(\"(?:npw|pwd|[^\"]*(?:password|passwd|token|secret|otp|cvv|cardNumber|idNo|idCard|citizenId|apiKey|accessKey|authorization)[^\"]*)\"\\s*:\\s*)"
+                    + "(\"(?:\\\\.|[^\"\\\\])*\"|null|\\d+)",
+            Pattern.CASE_INSENSITIVE);
+
+    private static final Pattern SENSITIVE_FORM_FIELD = Pattern.compile(
+            "((?:password|passwd|token|secret|otp|cvv)[^=&]*=)([^&]*)",
+            Pattern.CASE_INSENSITIVE);
+
+    private static final List<String> CREDENTIAL_ENDPOINTS = List.of(
+            "/public-api/register",
+            "/public-api/login",
+            "/public-api/checkuseremail",
+            "/public-api/updateusertoken",
+            "/api/user/updatepassword",
+            "/api/user/resetpassword");
+
+    private static final String OMITTED = "[OMITTED]";
+
+    private boolean isCredentialEndpoint(String url) {
+        if (url == null || url.isBlank()) {
+            return false;
+        }
+
+        String normalized = url.toLowerCase();
+        return CREDENTIAL_ENDPOINTS.stream().anyMatch(normalized::contains);
+    }
+
+    private String redactSensitive(String value) {
+        if (value == null || value.isBlank()) {
+            return value;
+        }
+
+        String redacted = SENSITIVE_JSON_FIELD.matcher(value).replaceAll("$1\"[REDACTED]\"");
+        return SENSITIVE_FORM_FIELD.matcher(redacted).replaceAll("$1[REDACTED]");
+    }
 
     @Override
     public AppErrorLogResponse saveErrorLog(AppErrorLogRequest request, 
@@ -108,9 +146,11 @@ public class AppErrorLogServiceImpl implements AppErrorLogService {
                     .httpMethod(request.getMethod() != null ? request.getMethod().toUpperCase() : null)
                     .httpStatus(request.getStatus())
                     .statusText(truncate(request.getStatusText(), 100))
-                    .responseData(responseDataJson)
-                    .requestData(truncate(request.getRequestData(), MAX_REQUEST_DATA_LENGTH))
-                    .meta(serializeMeta(meta))
+                    .responseData(redactSensitive(responseDataJson))
+                    .requestData(isCredentialEndpoint(request.getUrl())
+                            ? OMITTED
+                            : truncate(redactSensitive(request.getRequestData()), MAX_REQUEST_DATA_LENGTH))
+                    .meta(redactSensitive(serializeMeta(meta)))
                     .clientTimestamp(clientTimestamp)
                     .clientIp(clientIp)
                     .sessionId(sessionId)

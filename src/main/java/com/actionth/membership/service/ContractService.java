@@ -19,4 +19,8 @@ public interface ContractService {
     void updateContractSignature(ContractDTORequest contractDTO);
 
     void deleteContract(String uuid, String mode);
+
+    void regeneratePdf(String uuid);
+
+    void markReadyForSign(String uuid, boolean ready);
 }

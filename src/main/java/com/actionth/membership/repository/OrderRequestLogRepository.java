@@ -35,4 +35,9 @@ public interface OrderRequestLogRepository extends JpaRepository<OrderRequestLog
      * Find all failed requests within a time range.
      */
     List<OrderRequestLog> findByStatusAndCreatedTimeBetween(String status, OffsetDateTime start, OffsetDateTime end);
+
+    /**
+     * Find all logs for an order number, oldest first (payment review timeline).
+     */
+    List<OrderRequestLog> findByOrderNoOrderByIdAsc(String orderNo);
 }

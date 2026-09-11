@@ -88,6 +88,7 @@ app:
   env: ${APP_ENV:UAT}
   fe-url: ${APP_FE_URL:http://localhost:3000}
   be-url: ${APP_BE_URL:http://localhost:8080}
+  mail-from: ${APP_MAIL_FROM:${spring.mail.username}}
   email-logo-url: ${APP_EMAIL_LOGO_URL:${app.fe-url}/assets/images/logoB.png}
   email:
     daily-limit: ${APP_EMAIL_DAILY_LIMIT:500}   # global limit for ALL system emails

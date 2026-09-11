@@ -22,7 +22,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 @Table(name = "contract")
 @JsonIgnoreProperties(value = { "hibernateLazyInitializer", "handler" }, ignoreUnknown = true)
 @EqualsAndHashCode(callSuper = true)
-@EntityListeners(ContractListener.class) // เพิ่ม Listener
+@EntityListeners(ContractListener.class)
 public class Contract extends StandardFields {
 
   @Column(nullable = false, unique = true)
@@ -78,4 +78,5 @@ public class Contract extends StandardFields {
   private String customerName;
   private String customerPosition;
   private Boolean isUploadContract;
+  private Boolean isReadyForSign;
 }

@@ -370,6 +370,7 @@ CREATE TABLE `contract` (
   `taxNo` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `tel` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `zipcode` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `isReadyForSign` bit(1) DEFAULT NULL,
   `createdBy` int DEFAULT NULL,
   `updatedBy` int DEFAULT NULL,
   `eventId` int DEFAULT NULL,
@@ -1412,3 +1413,21 @@ CREATE TABLE `userToken` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
+--
+-- Table structure for table `paymentReviewAudit`
+--
+
+CREATE TABLE IF NOT EXISTS paymentReviewAudit (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    orderNo VARCHAR(20),
+    adminUserId INT,
+    action VARCHAR(50),
+    outcome VARCHAR(50),
+    transactionId VARCHAR(255),
+    beforeJson LONGTEXT,
+    afterJson LONGTEXT,
+    adminNote TEXT,
+    createdDateTime TIMESTAMP(6) NOT NULL,
+    PRIMARY KEY (id),
+    KEY idx_paymentReviewAudit_orderNo (orderNo)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

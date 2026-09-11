@@ -1,10 +1,24 @@
 package com.actionth.membership.service.impl;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.sql.SQLException;
+import java.time.OffsetDateTime;
 import java.time.Year;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.chrono.IsoChronology;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import javax.persistence.criteria.Join;
@@ -13,6 +27,7 @@ import javax.persistence.criteria.Predicate;
 import javax.transaction.Transactional;
 
 import org.modelmapper.ModelMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -21,6 +36,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import com.actionth.membership.exception.ResourceNotFoundException;
+import com.actionth.membership.exception.ValidationException;
 import com.actionth.membership.model.Contract;
 import com.actionth.membership.model.Event;
 import com.actionth.membership.model.MediaFile;
@@ -32,7 +48,9 @@ import com.actionth.membership.repository.ContractRepository;
 import com.actionth.membership.repository.EventRepository;
 import com.actionth.membership.repository.MediaFileRepository;
 import com.actionth.membership.service.AWSService;
+import com.actionth.membership.service.AppConfigService;
 import com.actionth.membership.service.ContractService;
+import com.actionth.membership.service.ReportService;
 import com.actionth.membership.service.UserService;
 
 import lombok.RequiredArgsConstructor;
@@ -54,6 +72,22 @@ public class ContractServiceImpl implements ContractService {
     private final MediaFileRepository mediaFileRepository;
 
     private final UserService userService;
+
+    private final ReportService reportService;
+
+    private final AppConfigService appConfigService;
+
+    @Value("${app.report-path}")
+    private String reportPath;
+
+    private static final String CONTRACT_PDF_TEMPLATE = "/Contract.jrxml";
+    private static final String CONTRACT_LOGO = "/logo.png";
+    private static final String CONTRACT_PREFIX = "contract";
+    private static final String USER_PREFIX = "userData";
+    private static final DateTimeFormatter CONTRACT_DATE_FMT = DateTimeFormatter
+            .ofPattern("d MMMM yyyy", new Locale("th", "TH"))
+            .withChronology(IsoChronology.INSTANCE);
+    private static final ZoneId BANGKOK = ZoneId.of("Asia/Bangkok");
 
     @Override
     public Page<ContractDTORequest> findAll(PagingData pagingData) {
@@ -85,6 +119,7 @@ public class ContractServiceImpl implements ContractService {
                 String role = user.getRole().getRole();
                 if ("organizer".equals(role)) {
                     predicates.add(criteriaBuilder.equal(organizer.get("id"), user.getId()));
+                    predicates.add(criteriaBuilder.equal(root.get("isReadyForSign"), true));
                 }
             }
 
@@ -113,30 +148,20 @@ public class ContractServiceImpl implements ContractService {
         dto.setId(contract.getUuid());
         dto.setEventId(contract.getEvent().getUuid());
 
-        if (dto.getPrefixPath() != null && !dto.getPrefixPath().isEmpty()) {
-            try {
-                String publicUrl = awsService.getPublicUrl(dto.getPrefixPath(), dto.getContractPath());
-                String customerSignaturePublicUrl = awsService.getPublicUrl(dto.getPrefixPath(),
-                        dto.getCustomerSignature());
-                String tempCertificatePath = awsService.getPublicUrl(dto.getPrefixPath(), dto.getCertificatePath());
-                String tempIdCardPath = awsService.getPublicUrl(dto.getPrefixPath(), dto.getIdCardPath());
-                String tempBankAccountPath = awsService.getPublicUrl(dto.getPrefixPath(), dto.getBankAccountPath());
-                String tempPowerOfAttorneyPath = awsService.getPublicUrl(dto.getPrefixPath(),
-                        dto.getPowerOfAttorneyPath());
-                String tempPp20Path = awsService.getPublicUrl(dto.getPrefixPath(), dto.getPp20Path());
-                String tempOtherDocumentPath = awsService.getPublicUrl(dto.getPrefixPath(), dto.getOtherDocumentPath());
-
-                dto.setTempContractPath(publicUrl);
-                dto.setThumbCustomerSignaturePath(customerSignaturePublicUrl);
-                dto.setTempCertificatePath(tempCertificatePath);
-                dto.setTempIdCardPath(tempIdCardPath);
-                dto.setTempBankAccountPath(tempBankAccountPath);
-                dto.setTempPowerOfAttorneyPath(tempPowerOfAttorneyPath);
-                dto.setTempPp20Path(tempPp20Path);
-                dto.setTempOtherDocumentPath(tempOtherDocumentPath);
-            } catch (SQLException e) {
-                log.error("Unable to generate public URL: {}", e.getMessage());
-            }
+        String prefix = (dto.getPrefixPath() != null && !dto.getPrefixPath().isEmpty())
+                ? dto.getPrefixPath()
+                : "contract";
+        try {
+            dto.setTempContractPath(awsService.getPublicUrl(prefix, dto.getContractPath()));
+            dto.setThumbCustomerSignaturePath(awsService.getPublicUrl(prefix, dto.getCustomerSignature()));
+            dto.setTempCertificatePath(awsService.getPublicUrl(prefix, dto.getCertificatePath()));
+            dto.setTempIdCardPath(awsService.getPublicUrl(prefix, dto.getIdCardPath()));
+            dto.setTempBankAccountPath(awsService.getPublicUrl(prefix, dto.getBankAccountPath()));
+            dto.setTempPowerOfAttorneyPath(awsService.getPublicUrl(prefix, dto.getPowerOfAttorneyPath()));
+            dto.setTempPp20Path(awsService.getPublicUrl(prefix, dto.getPp20Path()));
+            dto.setTempOtherDocumentPath(awsService.getPublicUrl(prefix, dto.getOtherDocumentPath()));
+        } catch (SQLException e) {
+            log.error("Unable to generate public URL: {}", e.getMessage());
         }
         List<MediaFile> mediaFiles = mediaFileRepository.findAllByPrefixPathAndRefId("contract",
                 contract.getId());
@@ -311,6 +336,7 @@ public class ContractServiceImpl implements ContractService {
         contract.setCustomerName(null);
         contract.setCustomerPosition(null);
         contract.setIsUploadContract(false);
+        contract.setIsReadyForSign(false);
 
         contractRepository.save(contract);
     }
@@ -321,6 +347,13 @@ public class ContractServiceImpl implements ContractService {
         Contract contract = contractRepository.findByUuid(contractDTO.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Contract not found"));
 
+        boolean alreadySigned = (contract.getCustomerSignature() != null && !contract.getCustomerSignature().isEmpty())
+                || Boolean.TRUE.equals(contract.getIsUploadContract());
+
+        if (alreadySigned) {
+            throw new ValidationException("สัญญานี้ถูกเซ็นแล้ว ไม่สามารถแก้ไขลายเซ็นได้");
+        }
+
         contract.setPrefixPath(contractDTO.getPrefixPath());
         contract.setContractPath(contractDTO.getContractPath());
         contract.setCustomerSignature(contractDTO.getCustomerSignature());
@@ -328,6 +361,179 @@ public class ContractServiceImpl implements ContractService {
         contract.setCustomerPosition(contractDTO.getCustomerPosition());
         contract.setIsUploadContract(contractDTO.getIsUploadContract());
 
+        contractRepository.save(contract);
+    }
+
+    @Override
+    public void regeneratePdf(String uuid) {
+        User currentUser = userService.getCurrentUserSession();
+        if (currentUser == null
+                || currentUser.getRole() == null
+                || !"admin".equalsIgnoreCase(currentUser.getRole().getRoleType())) {
+            throw new ValidationException("ท่านไม่มีสิทธิ์ในการเข้าถึงข้อมูล");
+        }
+
+        Contract contract = contractRepository.findByUuid(uuid)
+                .orElseThrow(() -> new ResourceNotFoundException("Contract not found"));
+
+        String contractPath = contract.getContractPath();
+        if (contractPath == null || contractPath.isEmpty()) {
+            throw new ResourceNotFoundException("Contract has no stored PDF to regenerate");
+        }
+
+        String prefix = (contract.getPrefixPath() != null && !contract.getPrefixPath().isEmpty())
+                ? contract.getPrefixPath()
+                : CONTRACT_PREFIX;
+
+        File logo = null;
+        File seal = null;
+        File tempPdf = null;
+        try {
+            Map<String, Object> paramMap = new HashMap<>();
+
+            logo = copyResourceToTemp(reportPath + CONTRACT_LOGO);
+            paramMap.put("logo", logo.getAbsolutePath());
+
+            String sealKey = appConfigService.findFirstByName("providerSealPath");
+            if (sealKey != null && !sealKey.isEmpty()) {
+                seal = copyResourceToTemp(reportPath + sealKey);
+                paramMap.put("providerSeal", seal.getAbsolutePath());
+            } else {
+                paramMap.put("providerSeal", "");
+            }
+
+            paramMap.put("providerSignature", resolveSignatureUrl(USER_PREFIX, userService.getApproverSignatureImg()));
+            paramMap.put("customerSignature", resolveSignatureUrl(CONTRACT_PREFIX, contract.getCustomerSignature()));
+
+            paramMap.put("runNo", nullToEmpty(contract.getRunNo()));
+            paramMap.put("contractDate", formatContractDate(contract.getContractDate()));
+            paramMap.put("detail", nullToEmpty(contract.getDetail()));
+            paramMap.put("customerCompany", nullToEmpty(contract.getOrganizerName()));
+            paramMap.put("organizer", nullToEmpty(contract.getOrganizerName()));
+            paramMap.put("tel", nullToEmpty(contract.getTel()));
+            paramMap.put("address", buildFullAddress(contract));
+            paramMap.put("taxNo", nullToEmpty(contract.getTaxNo()));
+            paramMap.put("event", contract.getEvent() != null ? nullToEmpty(contract.getEvent().getName()) : "");
+            paramMap.put("providerName", nullToEmpty(contract.getProviderName()));
+            paramMap.put("providerPosition", nullToEmpty(contract.getProviderPosition()));
+            paramMap.put("customerSeal", nullToEmpty(contract.getCustomerSeal()));
+            paramMap.put("customerName", emptyToNull(contract.getCustomerName()));
+            paramMap.put("customerPosition", emptyToNull(contract.getCustomerPosition()));
+
+            byte[] pdfBytes = reportService.generateReport(CONTRACT_PDF_TEMPLATE, paramMap);
+
+            tempPdf = new File(System.getProperty("java.io.tmpdir"), contractPath);
+            Files.write(tempPdf.toPath(), pdfBytes);
+            awsService.uploadFile(prefix, tempPdf, false);
+            log.info("Regenerated contract PDF uploaded: {}/{}", prefix, contractPath);
+        } catch (Exception e) {
+            log.error("Failed to regenerate contract PDF for runNo {}: {}", contract.getRunNo(), e.getMessage(), e);
+            throw new IllegalStateException("Failed to regenerate contract PDF: " + e.getMessage(), e);
+        } finally {
+            deleteQuietly(logo);
+            deleteQuietly(seal);
+            deleteQuietly(tempPdf);
+        }
+    }
+
+    private String resolveSignatureUrl(String prefix, String key) {
+        if (key == null || key.isEmpty()) {
+            return "";
+        }
+        if (key.startsWith("http://") || key.startsWith("https://")) {
+            return key;
+        }
+        try {
+            String url = awsService.getPublicUrl(prefix, key);
+            return url != null ? url : "";
+        } catch (Exception e) {
+            log.error("Failed to resolve signature URL for {}/{}: {}", prefix, key, e.getMessage());
+            return "";
+        }
+    }
+
+    private String buildFullAddress(Contract contract) {
+        StringBuilder sb = new StringBuilder();
+        appendIfPresent(sb, contract.getAddress());
+        appendIfPresent(sb, contract.getDistrict());
+        appendIfPresent(sb, contract.getAmphoe());
+        appendIfPresent(sb, contract.getProvince());
+        appendIfPresent(sb, contract.getZipcode());
+        return sb.toString().trim();
+    }
+
+    private void appendIfPresent(StringBuilder sb, String value) {
+        if (value == null) {
+            return;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return;
+        }
+        if (!sb.isEmpty()) {
+            sb.append(' ');
+        }
+        sb.append(trimmed);
+    }
+
+    private String formatContractDate(OffsetDateTime date) {
+        if (date == null) {
+            return "";
+        }
+        return ZonedDateTime.ofInstant(date.toInstant(), BANGKOK).format(CONTRACT_DATE_FMT);
+    }
+
+    private File copyResourceToTemp(String classpathResource) throws IOException {
+        String tmp = System.getProperty("java.io.tmpdir") + "/temp-" + System.nanoTime() + ".png";
+        try (InputStream in = getClass().getResourceAsStream(classpathResource)) {
+            if (in == null) {
+                throw new IOException("Resource not found: " + classpathResource);
+            }
+            Files.copy(in, Paths.get(tmp), StandardCopyOption.REPLACE_EXISTING);
+        }
+        return new File(tmp);
+    }
+
+    private void deleteQuietly(File file) {
+        if (file == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(file.toPath());
+        } catch (IOException e) {
+            log.warn("Failed to delete temp file {}", file.getAbsolutePath());
+        }
+    }
+
+    private String nullToEmpty(String value) {
+        return value == null ? "" : value;
+    }
+
+    private String emptyToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    @Override
+    public void markReadyForSign(String uuid, boolean ready) {
+        User currentUser = userService.getCurrentUserSession();
+        if (currentUser == null
+                || currentUser.getRole() == null
+                || !"admin".equalsIgnoreCase(currentUser.getRole().getRoleType())) {
+            throw new ValidationException("ท่านไม่มีสิทธิ์ในการเข้าถึงข้อมูล");
+        }
+
+        Contract contract = contractRepository.findByUuid(uuid)
+                .orElseThrow(() -> new ResourceNotFoundException("Contract not found"));
+
+        if (ready && (contract.getContractPath() == null || contract.getContractPath().isEmpty())) {
+            throw new ValidationException("ยังไม่มีเอกสารสัญญา กรุณาสร้างเอกสารก่อน");
+        }
+
+        contract.setIsReadyForSign(ready);
         contractRepository.save(contract);
     }
 

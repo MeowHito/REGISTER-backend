@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -64,5 +65,23 @@ public class ContractController {
     public Response<Void> deleteContract(@PathVariable String uuid, @RequestParam(value = "mode") String mode) {
         contractService.deleteContract(uuid, mode);
         return new Response<>(null, "Contract deleted successfully", true);
+    }
+
+    @PostMapping("/{uuid}/regeneratePdf")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Response<Void> regeneratePdf(@PathVariable String uuid) {
+        contractService.regeneratePdf(uuid);
+        return new Response<>(null, "Contract PDF regenerated successfully", true);
+    }
+
+    @PutMapping("/{uuid}/markReadyForSign")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Response<Void> markReadyForSign(
+            @PathVariable String uuid,
+            @RequestParam(value = "ready", defaultValue = "true") boolean ready) {
+        contractService.markReadyForSign(uuid, ready);
+        return new Response<>(null,
+                ready ? "Contract marked ready for signing" : "Contract reverted to draft",
+                true);
     }
 }

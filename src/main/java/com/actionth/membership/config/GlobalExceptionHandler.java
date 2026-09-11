@@ -2,6 +2,7 @@ package com.actionth.membership.config;
 
 import java.sql.SQLException;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
@@ -31,7 +32,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorDetails> handleGlobalException(Exception ex, WebRequest request) {
         ErrorDetails errorDetails = new ErrorDetails(ex.getMessage(), request.getDescription(false));
-        log.error("Unhandled exception: {}", errorDetails.getMessage(), ex);
+        log.error(errorDetails.getMessage(), ex);
         return new ResponseEntity<>(errorDetails, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
@@ -39,35 +40,44 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorDetails> handleResourceNotFoundException(ResourceNotFoundException ex,
             WebRequest request) {
         ErrorDetails errorDetails = new ErrorDetails(ex.getMessage(), request.getDescription(false));
-        log.warn("Resource not found: {}", errorDetails.getMessage());
+        log.info(errorDetails.getMessage());
         return new ResponseEntity<>(errorDetails, HttpStatus.NOT_FOUND);
     }
 
     @ExceptionHandler(ValidationException.class)
     public ResponseEntity<ErrorDetails> handleValidationException(ValidationException ex, WebRequest request) {
         ErrorDetails errorDetails = new ErrorDetails(ex.getMessage(), request.getDescription(false));
-        log.warn("Validation error: {}", errorDetails.getMessage());
+        log.info(errorDetails.getMessage());
         return new ResponseEntity<>(errorDetails, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorDetails> handleDataIntegrityViolationException(DataIntegrityViolationException ex,
+            WebRequest request) {
+        log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
+        ErrorDetails errorDetails = new ErrorDetails(errorHandler(ex.getMostSpecificCause().getMessage()),
+                request.getDescription(false));
+        return new ResponseEntity<>(errorDetails, HttpStatus.CONFLICT);
     }
 
     @ExceptionHandler(SQLException.class)
     public ResponseEntity<ErrorDetails> handleSQLException(SQLException ex, WebRequest request) {
         String userFriendlyMessage = errorHandler(ex.getMessage());
         ErrorDetails errorDetails = new ErrorDetails(userFriendlyMessage, request.getDescription(false));
-        log.error("SQL exception: {}", ex.getMessage(), ex);
+        log.info(errorDetails.getMessage());
         return new ResponseEntity<>(errorDetails, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler(BusinessException.class)
 public ResponseEntity<ErrorDetails> handleBusinessException(BusinessException ex, WebRequest request) {
     ErrorDetails errorDetails = new ErrorDetails(ex.getMessage(), request.getDescription(false));
-    log.warn("Business exception: {}", errorDetails.getMessage());
+    log.info(errorDetails.getMessage());
     return new ResponseEntity<>(errorDetails, HttpStatus.BAD_REQUEST);
 }
 
     @ExceptionHandler(EmailMismatchException.class)
     public ResponseEntity<Response<Object>> handleEmailMismatchException(EmailMismatchException ex, WebRequest request) {
-        log.warn("Email mismatch on invitation accept: {}", ex.getMessage());
+        log.info("Email mismatch on invitation accept: {}", ex.getMessage());
         Map<String, String> data = new java.util.HashMap<>();
         data.put("invitedEmail", ex.getInvitedEmail());
         return new ResponseEntity<>(
@@ -78,7 +88,7 @@ public ResponseEntity<ErrorDetails> handleBusinessException(BusinessException ex
 
     @ExceptionHandler(QuotaExceededException.class)
     public ResponseEntity<Response<Object>> handleQuotaExceededException(QuotaExceededException ex, WebRequest request) {
-        log.warn("Quota exceeded: {}", ex.getMessage());
+        log.info("Quota exceeded: {}", ex.getMessage());
         return new ResponseEntity<>(new Response<>(ex.getQuotaValidationError(), ex.getMessage(), false), HttpStatus.BAD_REQUEST);
     }
 
@@ -93,7 +103,7 @@ public ResponseEntity<ErrorDetails> handleBusinessException(BusinessException ex
 
     @ExceptionHandler(EventModificationException.class)
     public ResponseEntity<Response<Object>> handleEventModificationException(EventModificationException ex, WebRequest request) {
-        log.warn("Event modification blocked: {}", ex.getMessage());
+        log.info("Event modification blocked: {}", ex.getMessage());
         
         Map<String, String> errorData = new java.util.HashMap<>();
         errorData.put("field", ex.getField());

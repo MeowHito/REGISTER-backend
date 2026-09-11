@@ -50,6 +50,9 @@ public class EmailSenderService {
     @Value("${app.email-logo-url}")
     private String emailLogoUrl;
 
+    @Value("${app.mail-from}")
+    private String mailFrom;
+
     public String processTemplate(String templateName, Map<String, Object> variables) {
         try {
             Context context = new Context();
@@ -62,7 +65,8 @@ public class EmailSenderService {
         }
     }
 
-    public void sendEmail(String to, String cc, String subject, String content, List<EmailAttachmentDTO> attachments, String emailLogId) {
+    public void sendEmail(String to, String cc, String subject, String content, List<EmailAttachmentDTO> attachments,
+            String emailLogId) {
         log.info("[EmailSender] START sendEmail — logId: {}, to: {}, subject: {}, attachments: {}",
                 emailLogId, to, subject, attachments != null ? attachments.size() : 0);
 
@@ -78,6 +82,7 @@ public class EmailSenderService {
         try {
             log.info("[EmailSender] logId: {} — Building MIME message...", emailLogId);
             MimeMessageHelper helper = new MimeMessageHelper(javaMailSender.createMimeMessage(), true, "UTF-8");
+            helper.setFrom(mailFrom);
             helper.setTo(to);
             if (cc != null && !cc.isBlank()) {
                 helper.setCc(cc);
@@ -101,7 +106,8 @@ public class EmailSenderService {
                     emailLogService.markAsSent(logId);
                     log.info("[EmailSender] logId: {} — markAsSent completed successfully", emailLogId);
                 } catch (Exception ex) {
-                    log.error("[EmailSender] logId: {} — Email was sent but markAsSent FAILED: {}", emailLogId, ex.getMessage(), ex);
+                    log.error("[EmailSender] logId: {} — Email was sent but markAsSent FAILED: {}", emailLogId,
+                            ex.getMessage(), ex);
                 }
             } else {
                 log.warn("[EmailSender] logId is null — skipping markAsSent");
@@ -113,7 +119,8 @@ public class EmailSenderService {
                     emailLogService.markAsFailed(logId, e.getMessage());
                     log.info("[EmailSender] logId: {} — markAsFailed completed", emailLogId);
                 } catch (Exception ex) {
-                    log.error("[EmailSender] logId: {} — markAsFailed also FAILED: {}", emailLogId, ex.getMessage(), ex);
+                    log.error("[EmailSender] logId: {} — markAsFailed also FAILED: {}", emailLogId, ex.getMessage(),
+                            ex);
                 }
             }
             throw new BusinessException("Failed to send email: " + e.getMessage(), e);

@@ -273,4 +273,23 @@ public interface OrderRepository extends JpaRepository<Orders, Integer>, JpaSpec
 	@Query("SELECT o FROM Orders o JOIN o.event e WHERE o.paymentStatus = 'SUCCESS' AND e.eventDate > CURRENT_TIMESTAMP")
 	List<Orders> findAllSuccessOrders();
 
+	List<Orders> findByPaymentStatusOrderByCreatedTimeDesc(String paymentStatus);
+
+	// Orders paid successfully whose "ยืนยันการสมัคร" confirmation email never sent
+	@Query(value = """
+			SELECT o.orderNo AS orderNo, e.name AS eventName, u.email AS customerEmail,
+			       DATE_FORMAT(o.paymentDateTime, '%Y-%m-%d %H:%i') AS paidAt,
+			       SUM(CASE WHEN el.sendStatus = 'FAILED' THEN 1 ELSE 0 END) AS failedCount,
+			       SUM(CASE WHEN el.sendStatus = 'PENDING' THEN 1 ELSE 0 END) AS pendingCount
+			FROM orders o
+			JOIN event e ON o.eventId = e.id
+			LEFT JOIN `user` u ON o.createdBy = u.id
+			LEFT JOIN emailLog el ON el.orderId = o.uuid AND el.subject LIKE 'ยืนยันการสมัคร%'
+			WHERE o.paymentStatus = 'SUCCESS'
+			GROUP BY o.id, o.orderNo, e.name, u.email, o.paymentDateTime
+			HAVING SUM(CASE WHEN el.sendStatus = 'SENT' THEN 1 ELSE 0 END) = 0
+			ORDER BY o.paymentDateTime DESC
+			""", nativeQuery = true)
+	List<Map<String, Object>> findSuccessOrdersMissingConfirmation();
+
 }

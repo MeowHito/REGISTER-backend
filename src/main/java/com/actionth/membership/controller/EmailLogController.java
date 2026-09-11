@@ -6,9 +6,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,6 +22,7 @@ import java.util.List;
 import com.actionth.membership.model.dto.EmailAttachmentDTO;
 import com.actionth.membership.model.EmailLog;
 import com.actionth.membership.model.request.SimpleEmailRequest;
+import com.actionth.membership.model.request.UpdateEmailRecipientRequest;
 import com.actionth.membership.response.Response;
 import com.actionth.membership.service.EmailLogService;
 
@@ -115,9 +119,29 @@ public class EmailLogController {
         }
     }
 
-    /**
-     * Resend a failed email
-     */
+    @PreAuthorize("hasRole('ADMIN')")
+    @PatchMapping("/{id}")
+    public Response<EmailLog> updateRecipient(
+            @PathVariable Long id,
+            @RequestBody UpdateEmailRecipientRequest request) {
+        try {
+            String recipientTo = request.getRecipientTo() != null ? request.getRecipientTo().trim() : null;
+            if (recipientTo == null || recipientTo.isBlank()) {
+                return new Response<>(null, "Recipient email is required", false);
+            }
+
+            EmailLog updated = emailLogService.updateRecipient(id, recipientTo);
+            if (updated == null) {
+                return new Response<>(null, "Email log not found", false);
+            }
+            return new Response<>(updated, "Recipient updated successfully", true);
+        } catch (Exception e) {
+            log.error("Error updating email recipient:", e);
+            return new Response<>(null, "Error updating email recipient: " + e.getMessage(), false);
+        }
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/{id}/resend")
     public Response<Void> resendEmail(@PathVariable Long id) {
         try {
