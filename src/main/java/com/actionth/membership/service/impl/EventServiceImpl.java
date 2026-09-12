@@ -47,6 +47,7 @@ import com.actionth.membership.model.PagingData;
 import com.actionth.membership.model.PaymentType;
 import com.actionth.membership.model.Pricing;
 import com.actionth.membership.model.ShirtSize;
+import com.actionth.membership.model.EventAddOn;
 import com.actionth.membership.model.ShirtType;
 import com.actionth.membership.model.StandardFields;
 import com.actionth.membership.model.User;
@@ -64,6 +65,7 @@ import com.actionth.membership.model.dto.EventViewDto;
 import com.actionth.membership.model.dto.PaymentTypeDto;
 import com.actionth.membership.model.dto.PricingDto;
 import com.actionth.membership.model.dto.ShirtSizeDto;
+import com.actionth.membership.model.dto.EventAddOnDto;
 import com.actionth.membership.model.dto.ShirtTypeDto;
 import com.actionth.membership.model.projection.EventOrganizerProjection;
 import com.actionth.membership.projection.PricingAvailabilityProjection;
@@ -72,6 +74,7 @@ import com.actionth.membership.repository.EventCalendarRepository;
 import com.actionth.membership.repository.EventRepository;
 import com.actionth.membership.repository.OrderDetailRepository;
 import com.actionth.membership.repository.PricingRepository;
+import com.actionth.membership.repository.OrderAddOnRepository;
 import com.actionth.membership.repository.UserRepository;
 import com.actionth.membership.service.EventService;
 import com.actionth.membership.utils.ContextUtils;
@@ -88,6 +91,7 @@ public class EventServiceImpl implements EventService {
 	private final EventCalendarRepository eventCalendarRepository;
 	private final UserRepository userRepository;
 	private final OrderDetailRepository orderDetailRepository;
+	private final OrderAddOnRepository orderAddOnRepository;
 	private final PricingRepository pricingRepository;
 	private final ModelMapper modelMapper;
 	private final ContextUtils contextUtils;
@@ -262,6 +266,8 @@ public class EventServiceImpl implements EventService {
 			}
 		}
 
+		validateAddOnModification(entity, dto);
+
 		List<String> dtoShirtTypeIds = dto.getShirtTypes().stream()
 				.map(ShirtTypeDto::getId)
 				.filter(Objects::nonNull)
@@ -302,6 +308,56 @@ public class EventServiceImpl implements EventService {
 						}
 					}
 				}
+			}
+		}
+	}
+
+	private void validateAddOnModification(Event entity, EventDto dto) {
+		List<EventAddOnDto> dtoAddOns = dto.getAddOns() != null ? dto.getAddOns() : List.of();
+		List<String> dtoAddOnIds = dtoAddOns.stream()
+				.map(EventAddOnDto::getId)
+				.filter(Objects::nonNull)
+				.toList();
+
+		for (EventAddOn existing : entity.getAddOns()) {
+			if (existing.getUuid() == null) {
+				continue;
+			}
+
+			boolean sold = orderAddOnRepository.existsByAddOnIdAndActiveOrder(existing.getId());
+			if (!sold) {
+				continue;
+			}
+
+			if (!dtoAddOnIds.contains(existing.getUuid())) {
+				throw new EventModificationException(
+						"ไม่สามารถลบแพ็กเกจเสริมได้ เนื่องจากมีผู้สมัครซื้อไปแล้ว",
+						"addOn",
+						existing.getName());
+			}
+
+			EventAddOnDto matching = dtoAddOns.stream()
+					.filter(a -> existing.getUuid().equals(a.getId()))
+					.findFirst()
+					.orElse(null);
+			if (matching == null) {
+				continue;
+			}
+
+			if (existing.getPrice() != null && matching.getPrice() != null
+					&& existing.getPrice().compareTo(matching.getPrice()) != 0) {
+				throw new EventModificationException(
+						"ไม่สามารถแก้ไขราคาแพ็กเกจเสริมได้ เนื่องจากมีผู้สมัครซื้อไปแล้ว",
+						"addOn.price",
+						existing.getName());
+			}
+
+			Long used = orderAddOnRepository.sumUsedQtyByAddOnUuid(existing.getUuid());
+			if (matching.getQuota() != null && matching.getQuota() < used) {
+				throw new EventModificationException(
+						"ไม่สามารถลดโควต้าแพ็กเกจเสริมต่ำกว่าจำนวนที่ขายไปแล้วได้ (ขายไปแล้ว: " + used + ")",
+						"addOn.quota",
+						existing.getName());
 			}
 		}
 	}
@@ -684,6 +740,34 @@ public class EventServiceImpl implements EventService {
 			return f;
 		});
 
+		// === Add-ons (optional packages: accommodation, photos, shuttle…) ===
+		mergeChild(entity.getAddOns(), dto.getAddOns() != null ? dto.getAddOns() : List.<EventAddOnDto>of(),
+				(dtoA, existingMap) -> {
+					EventAddOn a = isUpdate && dtoA.getId() != null && existingMap.containsKey(dtoA.getId())
+							? existingMap.get(dtoA.getId())
+							: new EventAddOn();
+
+					a.setName(dtoA.getName());
+					a.setNameEn(dtoA.getNameEn());
+					a.setDescription(dtoA.getDescription());
+					a.setDescriptionEn(dtoA.getDescriptionEn());
+					a.setCategory(dtoA.getCategory());
+					a.setImageUrl(dtoA.getImageUrl());
+					a.setPrefixPath(dtoA.getPrefixPath());
+					a.setPrice(dtoA.getPrice());
+					a.setQuota(dtoA.getQuota());
+					a.setMaxPerOrder(dtoA.getMaxPerOrder());
+					a.setPerApplicant(Boolean.TRUE.equals(dtoA.getPerApplicant()));
+					a.setNoteLabel(dtoA.getNoteLabel());
+					a.setNoteLabelEn(dtoA.getNoteLabelEn());
+					a.setNoteRequired(Boolean.TRUE.equals(dtoA.getNoteRequired()));
+					a.setPosition(dtoA.getPosition());
+					// null on a freshly added row → on sale by default
+					a.setActive(!Boolean.FALSE.equals(dtoA.getActive()));
+					a.setEvent(entity);
+					return a;
+				});
+
 		// === Event Permission (only on create) ===
 		if (!isUpdate) {
 			entity.getEventPermissions().clear();
@@ -852,6 +936,7 @@ public class EventServiceImpl implements EventService {
 										.build()).toList())
 								.build()).toList())
 						.build()).toList())
+				.addOns(mapAddOns(event))
 				.shirtTypes(event.getShirtTypes().stream().map(st -> ShirtTypeDto.builder()
 						.id(st.getUuid())
 						.name(st.getName())
@@ -866,6 +951,53 @@ public class EventServiceImpl implements EventService {
 								.toList())
 						.build()).toList())
 				.build();
+	}
+
+	/**
+	 * Add-ons with their live remaining stock. The used-quantity totals are read
+	 * once per event rather than per add-on so the registration page costs a
+	 * single extra query no matter how many packages an organizer offers.
+	 */
+	private List<EventAddOnDto> mapAddOns(Event event) {
+		List<EventAddOn> addOns = event.getAddOns();
+		if (addOns == null || addOns.isEmpty()) {
+			return List.of();
+		}
+
+		Map<String, Long> usedByUuid = new java.util.HashMap<>();
+		for (Object[] row : orderAddOnRepository.sumUsedQtyByEventId(event.getId())) {
+			usedByUuid.put((String) row[0], ((Number) row[1]).longValue());
+		}
+
+		return addOns.stream()
+				.sorted(Comparator.comparing(a -> a.getPosition() != null ? a.getPosition() : 0))
+				.map(a -> {
+					int used = usedByUuid.getOrDefault(a.getUuid(), 0L).intValue();
+					Integer available = a.getQuota() != null ? Math.max(a.getQuota() - used, 0) : null;
+					return EventAddOnDto.builder()
+							.id(a.getUuid())
+							.name(a.getName())
+							.nameEn(a.getNameEn())
+							.description(a.getDescription())
+							.descriptionEn(a.getDescriptionEn())
+							.category(a.getCategory())
+							.imageUrl(a.getImageUrl())
+							.prefixPath(a.getPrefixPath())
+							.price(a.getPrice())
+							.quota(a.getQuota())
+							.maxPerOrder(a.getMaxPerOrder())
+							.perApplicant(Boolean.TRUE.equals(a.getPerApplicant()))
+							.noteLabel(a.getNoteLabel())
+							.noteLabelEn(a.getNoteLabelEn())
+							.noteRequired(Boolean.TRUE.equals(a.getNoteRequired()))
+							.position(a.getPosition())
+							.active(!Boolean.FALSE.equals(a.getActive()))
+							.usedQuota(used)
+							.availableQuota(available)
+							.isSoldOut(available != null && available <= 0)
+							.build();
+				})
+				.toList();
 	}
 
 	private List<PricingDto> mapPricingWithCalculatedStartDate(EventType eventType) {

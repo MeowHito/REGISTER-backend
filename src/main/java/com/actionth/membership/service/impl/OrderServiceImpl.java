@@ -6,12 +6,16 @@ import com.actionth.membership.model.Pricing;
 import com.actionth.membership.model.ShirtSize;
 import com.actionth.membership.model.ShirtType;
 import com.actionth.membership.model.dto.OrderDto;
+import com.actionth.membership.model.dto.OrderAddOnDto;
 import com.actionth.membership.model.dto.OrderUpdateResponse;
+import com.actionth.membership.model.EventAddOn;
+import com.actionth.membership.model.OrderAddOn;
 import com.actionth.membership.model.OrderDetail;
 import com.actionth.membership.repository.OrderRepository;
 import com.actionth.membership.model.request.OrderRequest;
 import com.actionth.membership.model.request.OrderUpdateRequest;
 import com.actionth.membership.model.request.OrderUpdateRequest.RunnerCouponDto;
+import com.actionth.membership.model.request.OrderAddOnRequest;
 import com.actionth.membership.model.request.OrderDetailRequest;
 
 import java.util.ArrayList;
@@ -21,6 +25,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 import java.time.OffsetDateTime;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
@@ -33,6 +38,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.actionth.membership.repository.CouponRepository;
 import com.actionth.membership.repository.EventRepository;
 import com.actionth.membership.repository.EventTypeRepository;
+import com.actionth.membership.repository.EventAddOnRepository;
+import com.actionth.membership.repository.OrderAddOnRepository;
 import com.actionth.membership.repository.OrderDetailRepository;
 import com.actionth.membership.repository.OrderRequestLogRepository;
 import com.actionth.membership.repository.ShirtTypeRepository;
@@ -65,6 +72,8 @@ public class OrderServiceImpl implements OrderService {
 
     private final OrderRepository orderRepository;
     private final OrderDetailRepository orderDetailRepository;
+    private final EventAddOnRepository eventAddOnRepository;
+    private final OrderAddOnRepository orderAddOnRepository;
     private final CouponRepository couponRepository;
     private final ModelMapper modelMapper;
 
@@ -99,15 +108,15 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * Build lock keys from order details.
+     * Build lock keys from the order's tickets and add-ons.
      * Keys are sorted to prevent deadlocks.
      */
     private List<String> buildLockKeys(OrderRequest orderRequest) {
         if (orderRequest.getOrderDetails() == null) {
             return List.of();
         }
-        
-        return orderRequest.getOrderDetails().stream()
+
+        Stream<String> detailKeys = orderRequest.getOrderDetails().stream()
             .filter(req -> req.getEventTypeId() != null)
             .map(req -> {
                 if (req.getPricingId() != null) {
@@ -115,7 +124,14 @@ public class OrderServiceImpl implements OrderService {
                 } else {
                     return "eventtype:" + req.getEventTypeId();
                 }
-            })
+            });
+
+        Stream<String> addOnKeys = (orderRequest.getAddOns() != null ? orderRequest.getAddOns() : List.<OrderAddOnRequest>of())
+            .stream()
+            .filter(req -> req.getAddOnId() != null)
+            .map(req -> "addon:" + req.getAddOnId());
+
+        return Stream.concat(detailKeys, addOnKeys)
             .distinct()
             .sorted()
             .toList();
@@ -133,6 +149,7 @@ public class OrderServiceImpl implements OrderService {
 
         try {
             validateQuotaAvailability(orderRequest);
+            validateAddOnAvailability(orderRequest);
 
             Orders order = modelMapper.map(orderRequest, Orders.class);
             order.setPaymentStatus("PENDING");
@@ -216,6 +233,11 @@ public class OrderServiceImpl implements OrderService {
             }
 
             Orders savedOrder = orderRepository.save(order);
+
+            // The order details now have ids, so a per-applicant add-on can
+            // safely reference the runner it belongs to.
+            attachAddOns(savedOrder, orderRequest);
+            savedOrder = orderRepository.save(savedOrder);
             long processingTime = System.currentTimeMillis() - startTime;
             log.info("[CreateOrder] correlationId={}, Order created successfully: orderNo={}, orderId={}, processingTimeMs={}", 
                     correlationId, savedOrder.getOrderNo(), savedOrder.getId(), processingTime);
@@ -243,6 +265,138 @@ public class OrderServiceImpl implements OrderService {
             saveOrderRequestLog(correlationId, orderRequest, orderNo, "FAILED", e.getMessage(), "UNEXPECTED_ERROR", processingTime);
             throw e;
         }
+    }
+
+    /**
+     * Add-on stock check, run inside the same distributed lock as the ticket
+     * quota check so a burst of concurrent buyers cannot oversell the last
+     * hotel room. Rejections reuse {@link QuotaExceededException} so the
+     * frontend's existing QUOTA_EXCEEDED handling covers add-ons too.
+     */
+    private void validateAddOnAvailability(OrderRequest orderRequest) {
+        List<OrderAddOnRequest> requested = orderRequest.getAddOns();
+        if (requested == null || requested.isEmpty()) {
+            return;
+        }
+
+        Map<String, Integer> qtyByAddOn = new HashMap<>();
+        for (OrderAddOnRequest req : requested) {
+            if (req.getAddOnId() == null) {
+                continue;
+            }
+            qtyByAddOn.merge(req.getAddOnId(), Math.max(1, req.getQty() != null ? req.getQty() : 1), Integer::sum);
+        }
+
+        for (Map.Entry<String, Integer> entry : qtyByAddOn.entrySet()) {
+            String addOnId = entry.getKey();
+            Integer requestedQty = entry.getValue();
+
+            EventAddOn addOn = eventAddOnRepository.findByUuid(addOnId)
+                    .orElseThrow(() -> new ResourceNotFoundException("AddOn not found: " + addOnId));
+
+            if (Boolean.FALSE.equals(addOn.getActive())) {
+                throw new QuotaExceededException(QuotaValidationError.builder()
+                        .eventTypeName(addOn.getName())
+                        .pricingName(addOn.getName())
+                        .isSpecialPrice(false)
+                        .availableQuota(0)
+                        .requestedQuota(requestedQty)
+                        .errorCode("ADDON_UNAVAILABLE")
+                        .message("Add-on '" + addOn.getName() + "' is no longer on sale")
+                        .build());
+            }
+
+            if (!Boolean.TRUE.equals(addOn.getPerApplicant())
+                    && addOn.getMaxPerOrder() != null && requestedQty > addOn.getMaxPerOrder()) {
+                throw new QuotaExceededException(QuotaValidationError.builder()
+                        .eventTypeName(addOn.getName())
+                        .pricingName(addOn.getName())
+                        .isSpecialPrice(false)
+                        .availableQuota(addOn.getMaxPerOrder())
+                        .requestedQuota(requestedQty)
+                        .errorCode("ADDON_LIMIT_EXCEEDED")
+                        .message("Add-on '" + addOn.getName() + "' is limited to "
+                                + addOn.getMaxPerOrder() + " per order")
+                        .build());
+            }
+
+            if (addOn.getQuota() == null) {
+                continue; // unlimited
+            }
+
+            Long used = orderAddOnRepository.sumUsedQtyByAddOnUuid(addOnId);
+            int available = addOn.getQuota() - used.intValue();
+            if (available < requestedQty) {
+                throw new QuotaExceededException(QuotaValidationError.builder()
+                        .eventTypeName(addOn.getName())
+                        .pricingName(addOn.getName())
+                        .isSpecialPrice(false)
+                        .availableQuota(Math.max(available, 0))
+                        .requestedQuota(requestedQty)
+                        .errorCode("ADDON_QUOTA_EXCEEDED")
+                        .message("Add-on '" + addOn.getName() + "' is sold out")
+                        .build());
+            }
+        }
+    }
+
+    /**
+     * Turn the requested add-ons into {@link OrderAddOn} rows. Unit prices come
+     * from the organizer's configuration, never from the request body, and the
+     * order's addOnTotal is recomputed from them.
+     */
+    private void attachAddOns(Orders order, OrderRequest orderRequest) {
+        List<OrderAddOnRequest> requested = orderRequest.getAddOns();
+        if (requested == null || requested.isEmpty()) {
+            order.setAddOnTotal(0.0);
+            return;
+        }
+
+        List<OrderDetail> details = order.getOrderDetails();
+        List<OrderAddOn> rows = new ArrayList<>();
+        double total = 0.0;
+
+        for (OrderAddOnRequest req : requested) {
+            if (req.getAddOnId() == null) {
+                continue;
+            }
+
+            EventAddOn addOn = eventAddOnRepository.findByUuid(req.getAddOnId())
+                    .orElseThrow(() -> new ResourceNotFoundException("AddOn not found: " + req.getAddOnId()));
+
+            boolean perApplicant = Boolean.TRUE.equals(addOn.getPerApplicant());
+            int qty = perApplicant ? 1 : Math.max(1, req.getQty() != null ? req.getQty() : 1);
+            double unitPrice = addOn.getPrice() != null ? addOn.getPrice().doubleValue() : 0.0;
+            double lineTotal = unitPrice * qty;
+
+            OrderDetail applicant = null;
+            if (perApplicant) {
+                Integer idx = req.getApplicantIndex();
+                if (idx == null || idx < 0 || idx >= details.size()) {
+                    throw new ResourceNotFoundException(
+                            "Applicant not found for add-on '" + addOn.getName() + "': index " + idx);
+                }
+                applicant = details.get(idx);
+            }
+
+            OrderAddOn row = new OrderAddOn();
+            row.setOrder(order);
+            row.setAddOn(addOn);
+            row.setOrderDetail(applicant);
+            row.setName(addOn.getName());
+            row.setNameEn(addOn.getNameEn());
+            row.setUnitPrice(unitPrice);
+            row.setQty(qty);
+            row.setTotalPrice(lineTotal);
+            row.setNote(truncate(req.getNote(), 500));
+            rows.add(row);
+
+            total += lineTotal;
+        }
+
+        order.getOrderAddOns().clear();
+        order.getOrderAddOns().addAll(rows);
+        order.setAddOnTotal(total);
     }
 
     private void validateQuotaAvailability(OrderRequest orderRequest) {
@@ -664,7 +818,34 @@ public class OrderServiceImpl implements OrderService {
     private OrderDto mapOrderToDto(Orders order) {
         OrderDto dto = modelMapper.map(order, OrderDto.class);
         dto.setId(order.getUuid());
+        dto.setOrderAddOns(mapOrderAddOns(order));
         return dto;
+    }
+
+    private List<OrderAddOnDto> mapOrderAddOns(Orders order) {
+        if (order.getOrderAddOns() == null) {
+            return List.of();
+        }
+        return order.getOrderAddOns().stream()
+                .map(oa -> {
+                    OrderDetail applicant = oa.getOrderDetail();
+                    String applicantName = applicant == null ? null
+                            : (Objects.toString(applicant.getFirstName(), "") + " "
+                                    + Objects.toString(applicant.getLastName(), "")).trim();
+                    return OrderAddOnDto.builder()
+                            .id(oa.getUuid())
+                            .addOnId(oa.getAddOn() != null ? oa.getAddOn().getUuid() : null)
+                            .orderDetailId(applicant != null ? applicant.getUuid() : null)
+                            .applicantName(applicantName != null && applicantName.isEmpty() ? null : applicantName)
+                            .name(oa.getName())
+                            .nameEn(oa.getNameEn())
+                            .unitPrice(oa.getUnitPrice())
+                            .qty(oa.getQty())
+                            .totalPrice(oa.getTotalPrice())
+                            .note(oa.getNote())
+                            .build();
+                })
+                .toList();
     }
 
     private String generateOrderNo() {

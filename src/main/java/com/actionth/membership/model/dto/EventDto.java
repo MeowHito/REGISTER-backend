@@ -53,4 +53,5 @@ public class EventDto {
     private List<EventTypeDto> eventTypes;
     private List<ShirtTypeDto> shirtTypes;
     private List<EventSelectionFieldDto> selectionFields;
+    private List<EventAddOnDto> addOns;
 }

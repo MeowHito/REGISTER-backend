@@ -26,5 +26,8 @@ public class OrderRequest {
     private Double feePercent;
     private Double totalAmountWithFee;
 
+    private Double addOnTotal;
+
     private List<OrderDetailRequest> orderDetails;
+    private List<OrderAddOnRequest> addOns;
 }

@@ -36,6 +36,7 @@ public class OrderDto {
     private Double fee;
     private Double feePercent;
     private Double totalAmountWithFee;
+    private Double addOnTotal;
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
     private OffsetDateTime paymentDateTime;
 
@@ -46,6 +47,9 @@ public class OrderDto {
 
     @Builder.Default
     private List<OrderDetailDto> orderDetails = new ArrayList<>();
+
+    @Builder.Default
+    private List<OrderAddOnDto> orderAddOns = new ArrayList<>();
 
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
     private OffsetDateTime cancelledDateTime;

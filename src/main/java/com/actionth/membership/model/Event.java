@@ -122,6 +122,13 @@ public class Event extends StandardFields {
 
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @LazyCollection(LazyCollectionOption.FALSE)
+    @JsonManagedReference("event-addOns")
+    @Builder.Default
+    @ToString.Exclude
+    private List<EventAddOn> addOns = new ArrayList<>();
+
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @LazyCollection(LazyCollectionOption.FALSE)
     @JsonManagedReference("event-eventPermissions")
     @Builder.Default
     @ToString.Exclude

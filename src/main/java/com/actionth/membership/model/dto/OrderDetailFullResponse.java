@@ -26,4 +26,6 @@ public class OrderDetailFullResponse {
     private String paymentMethod;
     private String ownerUuid;
     private String reviewReason;
+    private List<OrderAddOnDto> addOns;
+    private Double addOnTotal;
 }

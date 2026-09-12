@@ -42,6 +42,7 @@ public class ModelMapperConfig {
                 skip().setUuid(null);
                 skip().setEvent(null);
                 skip().setOrderDetails(null);
+                skip().setOrderAddOns(null);
             }
         });
 
@@ -87,6 +88,7 @@ public class ModelMapperConfig {
                     Event event = ((Orders) ctx.getSource()).getEvent();
                     return event != null ? event.getUuid() : null;
                 }).map(source).setEventId(null);
+                skip().setOrderAddOns(null);
             }
         });
 

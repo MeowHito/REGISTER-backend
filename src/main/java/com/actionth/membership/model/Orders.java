@@ -47,6 +47,7 @@ public class Orders extends StandardFields {
     private Double fee;
     private Double feePercent;
     private Double totalAmountWithFee;
+    private Double addOnTotal;
     private OffsetDateTime paymentDateTime;
 
     @Column(length = 100)
@@ -66,6 +67,12 @@ public class Orders extends StandardFields {
     @JsonManagedReference("order-orderDetail")
     @Builder.Default
     private List<OrderDetail> orderDetails = new ArrayList<>();
+
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @LazyCollection(LazyCollectionOption.FALSE)
+    @JsonManagedReference("order-orderAddOn")
+    @Builder.Default
+    private List<OrderAddOn> orderAddOns = new ArrayList<>();
 
     private OffsetDateTime cancelledDateTime;
     private String cancelledBy;

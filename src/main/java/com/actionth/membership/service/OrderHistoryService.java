@@ -9,6 +9,7 @@ import javax.transaction.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.time.OffsetDateTime;
 
@@ -28,6 +29,7 @@ import com.actionth.membership.model.Orders;
 import com.actionth.membership.model.PagingData;
 import com.actionth.membership.model.User;
 import com.actionth.membership.exception.ResourceNotFoundException;
+import com.actionth.membership.model.dto.OrderAddOnDto;
 import com.actionth.membership.model.dto.OrderDetailFullResponse;
 import com.actionth.membership.model.dto.OrderDetailResponse;
 import com.actionth.membership.model.dto.OrderHistoryResponse;
@@ -216,6 +218,27 @@ public class OrderHistoryService {
         response.setPaymentMethod(order.getPaymentMethod());
         response.setOwnerUuid(order.getCreatedBy() != null ? order.getCreatedBy().getUuid() : null);
         response.setReviewReason(order.getReviewReason());
+        response.setAddOnTotal(order.getAddOnTotal());
+        response.setAddOns(order.getOrderAddOns().stream()
+                .map(oa -> {
+                    OrderDetail applicant = oa.getOrderDetail();
+                    String applicantName = applicant == null ? null
+                            : (Objects.toString(applicant.getFirstName(), "") + " "
+                                    + Objects.toString(applicant.getLastName(), "")).trim();
+                    return OrderAddOnDto.builder()
+                            .id(oa.getUuid())
+                            .addOnId(oa.getAddOn() != null ? oa.getAddOn().getUuid() : null)
+                            .orderDetailId(applicant != null ? applicant.getUuid() : null)
+                            .applicantName(applicantName != null && applicantName.isEmpty() ? null : applicantName)
+                            .name(oa.getName())
+                            .nameEn(oa.getNameEn())
+                            .unitPrice(oa.getUnitPrice())
+                            .qty(oa.getQty())
+                            .totalPrice(oa.getTotalPrice())
+                            .note(oa.getNote())
+                            .build();
+                })
+                .toList());
 
         return response;
     }
