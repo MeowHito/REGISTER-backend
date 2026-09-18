@@ -592,6 +592,7 @@ CREATE TABLE `event` (
   `prefixPath` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `shippingFee` decimal(19,2) DEFAULT NULL,
   `showChecklist` bit(1) DEFAULT NULL,
+  `testMode` bit(1) DEFAULT NULL,
   `startRegistrationDate` datetime(6) DEFAULT NULL,
   `type` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `createdBy` int DEFAULT NULL,

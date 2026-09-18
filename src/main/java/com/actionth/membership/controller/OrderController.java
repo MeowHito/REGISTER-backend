@@ -95,7 +95,8 @@ public class OrderController {
             try {
                 Orders order = orderService.findByUuid(request.getOrderId());
                 if (order != null) {
-                    paymentWebhookService.sendSuccessEmail(order, "FULLY_DISCOUNTED");
+                    boolean testMode = order.getEvent() != null && Boolean.TRUE.equals(order.getEvent().getTestMode());
+                    paymentWebhookService.sendSuccessEmail(order, testMode ? "TEST_MODE" : "FULLY_DISCOUNTED");
                 }
             } catch (Exception e) {
                 log.warn("Failed to send success email for fully discounted order orderId={}: {}", request.getOrderId(), e.getMessage());

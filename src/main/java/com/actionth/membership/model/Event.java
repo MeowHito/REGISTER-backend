@@ -72,6 +72,12 @@ public class Event extends StandardFields {
     private Boolean isDraft;
     private Boolean showChecklist;
 
+    /**
+     * Admin-only switch for rehearsing the registration flow: orders on a
+     * test-mode event skip the payment gateway and go straight to SUCCESS.
+     */
+    private Boolean testMode;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "organizerId")
     @JsonBackReference("user-event")

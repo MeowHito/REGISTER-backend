@@ -28,4 +28,5 @@ public class OrderDetailFullResponse {
     private String reviewReason;
     private List<OrderAddOnDto> addOns;
     private Double addOnTotal;
+    private Boolean testMode;
 }

@@ -219,6 +219,7 @@ public class OrderHistoryService {
         response.setOwnerUuid(order.getCreatedBy() != null ? order.getCreatedBy().getUuid() : null);
         response.setReviewReason(order.getReviewReason());
         response.setAddOnTotal(order.getAddOnTotal());
+        response.setTestMode(order.getEvent() != null && Boolean.TRUE.equals(order.getEvent().getTestMode()));
         response.setAddOns(order.getOrderAddOns().stream()
                 .map(oa -> {
                     OrderDetail applicant = oa.getOrderDetail();

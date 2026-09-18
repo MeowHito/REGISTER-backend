@@ -70,6 +70,9 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class OrderServiceImpl implements OrderService {
 
+    /** paymentMethod stamped on orders completed under an event's test mode, so they are easy to find and purge. */
+    public static final String TEST_MODE_PAYMENT_METHOD = "test";
+
     private final OrderRepository orderRepository;
     private final OrderDetailRepository orderDetailRepository;
     private final EventAddOnRepository eventAddOnRepository;
@@ -575,8 +578,17 @@ public class OrderServiceImpl implements OrderService {
             order.setFeePercent(request.getFeePercent());
             order.setTotalAmountWithFee(request.getTotalAmountWithFee());
 
+            boolean testMode = order.getEvent() != null && Boolean.TRUE.equals(order.getEvent().getTestMode());
             boolean skipPayment = false;
-            if (request.getTotalAmountWithFee() != null && request.getTotalAmountWithFee() == 0) {
+            if (testMode) {
+                if (!PaymentStatus.PENDING.toString().equalsIgnoreCase(order.getPaymentStatus())) {
+                    throw new IllegalArgumentException("Order is not pending: " + order.getPaymentStatus());
+                }
+                log.info("[UpdatePayment] correlationId={}, Event is in test mode - skipping payment, orderNo={}",
+                        correlationId, orderNo);
+                order.setPaymentMethod(TEST_MODE_PAYMENT_METHOD);
+                skipPayment = true;
+            } else if (request.getTotalAmountWithFee() != null && request.getTotalAmountWithFee() == 0) {
                 skipPayment = validateFreeOrder(order, code, codeType, correlationId);
                 if (!skipPayment) {
                     log.warn("[UpdatePayment] correlationId={}, Client sent totalAmountWithFee=0 but server validation failed - rejecting free order, orderNo={}",
@@ -587,8 +599,8 @@ public class OrderServiceImpl implements OrderService {
             }
 
             if (skipPayment) {
-                log.info("[UpdatePayment] correlationId={}, Total amount is 0 (fully discounted, validated) - marking as SUCCESS, orderNo={}", 
-                        correlationId, orderNo);
+                log.info("[UpdatePayment] correlationId={}, Skipping payment (testMode={}) - marking as SUCCESS, orderNo={}",
+                        correlationId, testMode, orderNo);
                 order.setPaymentStatus(PaymentStatus.SUCCESS.toString());
                 order.setPaymentDateTime(OffsetDateTime.now());
             }
@@ -686,7 +698,9 @@ public class OrderServiceImpl implements OrderService {
             if (skipPayment) {
                 return OrderUpdateResponse.builder()
                         .skipPayment(true)
-                        .message("Order completed without payment (fully discounted)")
+                        .message(testMode
+                                ? "Order completed without payment (test mode)"
+                                : "Order completed without payment (fully discounted)")
                         .build();
             }
 

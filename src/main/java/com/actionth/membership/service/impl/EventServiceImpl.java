@@ -450,9 +450,7 @@ public class EventServiceImpl implements EventService {
 	 * caller's EventPermission, and delete needs canDelete.
 	 */
 	private void assertCanModifyEvent(Event event, boolean deleting) {
-		Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-		if (auth != null && auth.getAuthorities().stream()
-				.anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()))) {
+		if (isCurrentUserAdmin()) {
 			return;
 		}
 
@@ -479,6 +477,12 @@ public class EventServiceImpl implements EventService {
 			throw new org.springframework.security.access.AccessDeniedException(
 					"No permission to " + (deleting ? "delete" : "update") + " this event");
 		}
+	}
+
+	private boolean isCurrentUserAdmin() {
+		Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+		return auth != null && auth.getAuthorities().stream()
+				.anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
 	}
 
 	@Override
@@ -535,6 +539,13 @@ public class EventServiceImpl implements EventService {
 		entity.setEventFontColor(dto.getEventFontColor());
 		entity.setIsDraft(dto.getIsDraft());
 		entity.setShowChecklist(dto.getShowChecklist());
+		// Test mode waives payment, so only an admin may flip it; anyone else
+		// saving the event keeps whatever the admin last set.
+		if (isCurrentUserAdmin()) {
+			entity.setTestMode(Boolean.TRUE.equals(dto.getTestMode()));
+		} else if (!isUpdate) {
+			entity.setTestMode(false);
+		}
 
 		if (dto.getProvinceId() != null) {
 			CountryState countryState = eventRepository.findCountryStateByUuid(dto.getProvinceId())
@@ -859,6 +870,7 @@ public class EventServiceImpl implements EventService {
 				.eventFontColor(event.getEventFontColor())
 				.isDraft(event.getIsDraft())
 				.showChecklist(event.getShowChecklist())
+				.testMode(Boolean.TRUE.equals(event.getTestMode()))
 				.eventConditions(event.getEventConditions().stream()
 						.map(ec -> EventConditionDto.builder()
 								.id(ec.getUuid())

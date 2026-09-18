@@ -46,6 +46,7 @@ public class EventDto {
 
     private Boolean isDraft;
     private Boolean showChecklist;
+    private Boolean testMode;
 
     private List<EventConditionDto> eventConditions;
     private List<EventDetailDto> eventDetails;
