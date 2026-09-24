@@ -17,4 +17,5 @@ public class FinanceSummaryTotalDTO {
     private BigDecimal totalNetAmount;
     private BigDecimal totalServiceFee;
     private BigDecimal totalAmountWithFee;
+    private BigDecimal totalAddOn;
 }

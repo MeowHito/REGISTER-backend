@@ -1,5 +1,7 @@
 package com.actionth.membership.service.impl;
 
+import com.actionth.membership.service.NotificationService;
+import com.actionth.membership.constant.NotificationType;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -36,6 +38,7 @@ public class EventCalendarServiceImpl implements EventCalendarService {
 
     private final EventRepository eventRepository;
     private final EventCalendarRepository eventCalendarRepository;
+    private final NotificationService notificationService;
     private final ModelMapper modelMapper;
 
     @Override
@@ -103,6 +106,10 @@ public class EventCalendarServiceImpl implements EventCalendarService {
         EventCalendar event = modelMapper.map(eventCalendarDTO, EventCalendar.class);
         event.setIsApproved(null);
         eventCalendarRepository.save(event);
+        notificationService.notifyAdmins(NotificationType.EVENT_CALENDAR_SUBMITTED, "มีการฝากปฏิทินกิจกรรมใหม่",
+                event.getEventName()
+                        + (event.getSubmitterName() != null ? " · โดย " + event.getSubmitterName() : ""),
+                "/backoffice/eventCalendarList");
     }
 
     @Override

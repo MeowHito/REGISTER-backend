@@ -64,6 +64,9 @@ public class DashboardRegistrationDTO {
     private Integer countInternalParticipant;
     private Integer countExternalParticipant;
 
+    @Builder.Default
+    private List<AddOnSalesDto> addOnSales = new ArrayList<>();
+
     @Data
     @Builder
     @NoArgsConstructor
@@ -71,6 +74,24 @@ public class DashboardRegistrationDTO {
     public static class TimeBucketCountDto {
         private OffsetDateTime dateTime;
         private Integer count;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class AddOnSalesDto {
+        private String id;
+        private String name;
+        private String category;
+        private Boolean perApplicant;
+        /** null = unlimited. */
+        private Integer quota;
+        /** Units on paid orders. */
+        private Integer sold;
+        /** Units held by PENDING / REVIEW orders (they still count against quota). */
+        private Integer reserved;
+        private Double revenue;
     }
 
 }

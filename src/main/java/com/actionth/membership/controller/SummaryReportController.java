@@ -1,6 +1,7 @@
 package com.actionth.membership.controller;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -43,6 +44,15 @@ public class SummaryReportController {
         }
         return new Response<>(summaryReportService.getFinanceSummary(id, startDate, endDate, paging),
                 "Finance summary retrieved successfully", true);
+    }
+
+    @GetMapping("/finaceAddOn")
+    public Response<List<FinanceSummaryDTO>> getFinanceAddOnSummary(
+            @RequestParam(value = "id", required = false) String id,
+            @RequestParam("startDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime startDate,
+            @RequestParam("endDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime endDate) {
+        return new Response<>(summaryReportService.getFinanceAddOnSummary(id, startDate, endDate),
+                "Finance add-on summary retrieved successfully", true);
     }
 
     @GetMapping("/revenue")

@@ -1,5 +1,7 @@
 package com.actionth.membership.service.impl;
 
+import com.actionth.membership.service.NotificationService;
+import com.actionth.membership.constant.NotificationType;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -62,6 +64,8 @@ public class AnnouncementServiceImpl implements AnnouncementService {
     private final ObjectMapper mapper;
 
     private final UserService userService;
+
+    private final NotificationService notificationService;
 
     @Override
     public Page<AnnouncementDTO> findAll(PagingData pagingData) {
@@ -189,6 +193,9 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         announcement.setEvent(event);
 
         announcementRepository.save(announcement);
+        notificationService.notifyAdmins(NotificationType.ANNOUNCEMENT_SUBMITTED, "มีการฝากข่าวประชาสัมพันธ์ใหม่",
+                event.getName() + (announcement.getTitle() != null ? " · " + announcement.getTitle() : ""),
+                "/backoffice/announcementList");
 
         // เพิ่มรูปที่แนบมากับ announcement
         if (announcementDTO.getMediaFiles() != null && !announcementDTO.getMediaFiles().isEmpty()) {

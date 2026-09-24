@@ -1,6 +1,8 @@
 package com.actionth.membership.repository;
 
+import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -41,4 +43,29 @@ public interface OrderAddOnRepository extends JpaRepository<OrderAddOn, Integer>
 			WHERE o.paymentStatus IN ('SUCCESS', 'PENDING', 'REVIEW') AND oa.addOn.id = :addOnId
 			""")
 	boolean existsByAddOnIdAndActiveOrder(@Param("addOnId") Integer addOnId);
+
+	/**
+	 * Add-on sales of one event for the finance report: one row per add-on and
+	 * snapshotted unit price, paid orders only, same date window as the
+	 * registration rows.
+	 */
+	@Query(value = """
+			SELECT
+			    oa.name AS name,
+			    oa.unitPrice AS unitPrice,
+			    SUM(oa.qty) AS qty,
+			    SUM(oa.totalPrice) AS total
+			FROM orderAddOn oa
+			JOIN orders o ON oa.orderId = o.id
+			JOIN event e ON o.eventId = e.id
+			WHERE e.uuid = :eventUuid
+			    AND o.createdTime BETWEEN :startDate AND :endDate
+			    AND o.paymentStatus = 'SUCCESS'
+			    AND (oa.active IS NULL OR oa.active = 1)
+			GROUP BY oa.addOnId, oa.name, oa.unitPrice
+			ORDER BY MIN(oa.id)
+			""", nativeQuery = true)
+	List<Map<String, Object>> summarizeAddOnFinance(@Param("eventUuid") String eventUuid,
+			@Param("startDate") OffsetDateTime startDate,
+			@Param("endDate") OffsetDateTime endDate);
 }

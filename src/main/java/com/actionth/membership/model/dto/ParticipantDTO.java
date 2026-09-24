@@ -47,4 +47,7 @@ public class ParticipantDTO {
 
     private List<SelectionAnswerDto> selectionAnswers;
     private List<EventSelectionFieldDto> selectionFields;
+
+    /** Add-ons on this row: the runner's own, plus per-order ones on the order's first applicant. */
+    private List<OrderAddOnDto> addOns;
 }

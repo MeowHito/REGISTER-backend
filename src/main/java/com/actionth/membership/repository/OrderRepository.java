@@ -71,7 +71,7 @@ public interface OrderRepository extends JpaRepository<Orders, Integer>, JpaSpec
 			        AND o.createdTime BETWEEN :startDate AND :endDate
 			        AND o.paymentStatus = 'SUCCESS'
 			    ) AS q
-			    GROUP BY q.eventTypeId, q.pricingId, q.unitPrice
+			    GROUP BY q.eventTypeId, q.pricingId, q.unitPrice, q.name
 			    ORDER BY q.eventTypeId, q.pricingId
 			""", nativeQuery = true)
 	List<Map<String, Object>> summarizeOrderFinance(
@@ -87,7 +87,8 @@ public interface OrderRepository extends JpaRepository<Orders, Integer>, JpaSpec
 			        SUM(o.unitPrice) AS totalAmount,
 			        SUM(o.totalPrice) AS totalNetAmount,
 			        SUM(o.fee) AS totalServiceFee,
-			        SUM(totalAmountWithFee) AS totalAmountWithFee
+			        SUM(totalAmountWithFee) AS totalAmountWithFee,
+			        SUM(o.addOnTotal) AS totalAddOn
 			FROM orders o
 			JOIN event e ON o.eventId = e.id
 			WHERE e.uuid = :eventUuid AND o.createdTime BETWEEN :startDate AND :endDate
@@ -139,7 +140,8 @@ public interface OrderRepository extends JpaRepository<Orders, Integer>, JpaSpec
 			    e.name AS eventName,
 			    o.paymentMethod AS paymentMethod,
 			    SUM(o.unitPrice) AS registrationFee,
-			    SUM(o.shippingFee) AS shippingFee
+			    SUM(o.shippingFee) AS shippingFee,
+			    SUM(o.addOnTotal) AS addOnTotal
 			FROM orders o
 			JOIN event e ON o.eventId = e.id
 			JOIN contract c ON c.eventId = e.id
@@ -164,6 +166,13 @@ public interface OrderRepository extends JpaRepository<Orders, Integer>, JpaSpec
 			    od.discountShirt AS discountShirt,
 			    od.shippingFee AS shippingFee,
 			    od.netPrice AS netPrice,
+			    (SELECT COALESCE(SUM(oa.totalPrice), 0)
+			        FROM orderAddOn oa
+			        WHERE oa.orderId = o.id AND (oa.active IS NULL OR oa.active = 1)
+			          AND (oa.orderDetailId = od.id
+			               OR (oa.orderDetailId IS NULL AND od.id = (
+			                   SELECT MIN(od2.id) FROM orderDetail od2
+			                   WHERE od2.orderId = o.id AND (od2.active IS NULL OR od2.active = 1))))) AS addOnTotal,
 			    et.name AS eventTypeName,
 			    o.paymentStatus AS paymentStatus,
 			    o.paymentMethod AS paymentMethod,
@@ -194,6 +203,13 @@ public interface OrderRepository extends JpaRepository<Orders, Integer>, JpaSpec
 			    od.discountShirt AS discountShirt,
 			    od.shippingFee AS shippingFee,
 			    od.netPrice AS totalAmount,
+			    (SELECT COALESCE(SUM(oa.totalPrice), 0)
+			        FROM orderAddOn oa
+			        WHERE oa.orderId = o.id AND (oa.active IS NULL OR oa.active = 1)
+			          AND (oa.orderDetailId = od.id
+			               OR (oa.orderDetailId IS NULL AND od.id = (
+			                   SELECT MIN(od2.id) FROM orderDetail od2
+			                   WHERE od2.orderId = o.id AND (od2.active IS NULL OR od2.active = 1))))) AS addOnTotal,
 			    et.name AS eventTypeName,
 			    o.paymentStatus AS paymentStatus,
 			    o.paymentMethod AS paymentMethod,

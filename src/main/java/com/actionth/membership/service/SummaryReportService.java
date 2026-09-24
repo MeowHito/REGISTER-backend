@@ -18,6 +18,8 @@ public interface SummaryReportService {
 
     List<Map<String, Object>> getSummarizeOrderFinance(String eventUuid, String eventName, OffsetDateTime startDate, OffsetDateTime endDate);
 
+    List<FinanceSummaryDTO> getFinanceAddOnSummary(String eventUuid, OffsetDateTime startDate, OffsetDateTime endDate);
+
     PageWithSummary<FinanceSummaryDTO, FinanceSummaryTotalDTO> getFinanceSummary(String eventUuid, OffsetDateTime startDate, OffsetDateTime endDate, PagingData pagingData);
 
     Page<RevenueSummaryDTO> getSummarizeOrderRevenue(OffsetDateTime startDate, OffsetDateTime endDate, PagingData pagingData);

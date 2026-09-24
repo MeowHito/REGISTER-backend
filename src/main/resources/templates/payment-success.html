@@ -197,6 +197,34 @@
                                             </table>
                                         </td>
                                     </tr>
+
+                                    <!-- Add-ons the buyer picked (hotel, photo package, …) -->
+                                    <tr th:each="ad, adStat : ${addOns}"
+                                        th:style="(${adStat.index} + ${#lists.size(applicants)}) % 2 == 0 ? 'background-color: #ffffff' : 'background-color: #f8fafc'">
+                                        <td style="padding: 14px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: top;">
+                                            <p style="margin: 0 0 4px 0; font-size: 14px; font-weight: 600; color: #1e293b;">
+                                                &#127873; <span th:text="${ad['name']} ?: '-'">Add-on</span>
+                                            </p>
+                                            <p style="margin: 0; font-size: 12px; color: #64748b; line-height: 1.6;">
+                                                <span th:if="${ad['applicantName'] != null and ad['applicantName'] != ''}"
+                                                      th:text="${ad['applicantName']}">Applicant</span>
+                                                <span th:unless="${ad['applicantName'] != null and ad['applicantName'] != ''}"
+                                                      th:text="'จำนวน ' + ${ad['qty']}">Qty</span>
+                                                <span th:if="${ad['note'] != null and ad['note'] != ''}">
+                                                    <br /><span th:text="${ad['noteLabel'] != null and ad['noteLabel'] != '' ? ad['noteLabel'] : 'หมายเหตุ'}">หมายเหตุ</span>: <span th:text="${ad['note']}">Note</span>
+                                                </span>
+                                            </p>
+                                        </td>
+                                        <td style="padding: 14px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: top; text-align: right;">
+                                            <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; font-size: 12px; line-height: 1.8;">
+                                                <tr>
+                                                    <td style="font-weight: 700; color: #1e293b;">รวม</td>
+                                                    <td style="text-align: right; font-weight: 700; color: #1e293b;"
+                                                        th:text="${#numbers.formatDecimal(ad['totalPrice'] != null ? ad['totalPrice'] : 0, 1, 'COMMA', 2, 'POINT')}">0.00</td>
+                                                </tr>
+                                            </table>
+                                        </td>
+                                    </tr>
                                 </tbody>
                             </table>
                         </td>
@@ -217,6 +245,10 @@
                                             <tr>
                                                 <td style="color: #64748b;">ค่าส่งรวม</td>
                                                 <td style="text-align: right; color: #334155;" th:text="${#numbers.formatDecimal(totalShipping != null ? totalShipping : 0, 1, 'COMMA', 2, 'POINT')}">0.00</td>
+                                            </tr>
+                                            <tr th:if="${addOnTotal != null and addOnTotal > 0}">
+                                                <td style="color: #64748b;">สินค้าเสริม</td>
+                                                <td style="text-align: right; color: #334155;" th:text="${#numbers.formatDecimal(addOnTotal, 1, 'COMMA', 2, 'POINT')}">0.00</td>
                                             </tr>
                                             <tr>
                                                 <td style="color: #64748b;">ส่วนลด (ไม่รับเสื้อ)</td>

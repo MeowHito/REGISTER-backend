@@ -28,5 +28,6 @@ public class RevenueDetailSummaryDTO {
     private String paymentStatus;
     private String paymentMethod;
     private String registrationDateTime;
+    private BigDecimal addOnTotal;
 
 }

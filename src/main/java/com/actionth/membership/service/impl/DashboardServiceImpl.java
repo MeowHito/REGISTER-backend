@@ -9,6 +9,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,6 +30,7 @@ import org.springframework.stereotype.Service;
 import com.actionth.membership.exception.ResourceNotFoundException;
 import com.actionth.membership.model.AgeGroup.Gender;
 import com.actionth.membership.model.Event;
+import com.actionth.membership.model.EventAddOn;
 import com.actionth.membership.model.EventPermission;
 import com.actionth.membership.model.EventType;
 import com.actionth.membership.model.User;
@@ -886,6 +888,8 @@ public class DashboardServiceImpl implements DashboardService {
         OffsetDateTime registrationOpen = toUtc(event.getStartRegistrationDate());
         OffsetDateTime registrationClose = toUtc(event.getEndRegistrationDate());
 
+        List<DashboardRegistrationDTO.AddOnSalesDto> addOnSales = buildAddOnSales(event, userUuid, admin);
+
         int countInternal = 0; // ยังไม่มีข้อมูลจริง
         int countExternal = 0; // ยังไม่มีข้อมูลจริง
 
@@ -912,7 +916,42 @@ public class DashboardServiceImpl implements DashboardService {
                 .registrationClose(registrationClose)
                 .countInternalParticipant(countInternal)
                 .countExternalParticipant(countExternal)
+                .addOnSales(addOnSales)
                 .build();
+    }
+
+    private List<DashboardRegistrationDTO.AddOnSalesDto> buildAddOnSales(Event event, String userUuid,
+            boolean admin) {
+        Map<String, Map<String, Object>> salesByAddOn = new HashMap<>();
+        try {
+            for (Map<String, Object> row : Optional
+                    .ofNullable(dashboardRepository.sumAddOnSalesByEvent(event.getUuid(), userUuid, admin))
+                    .orElse(List.of())) {
+                if (row != null && row.get("addOnId") != null) {
+                    salesByAddOn.put(String.valueOf(row.get("addOnId")), row);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to sum add-on sales. Fallback to zeros.", e);
+        }
+
+        return Optional.ofNullable(event.getAddOns()).orElse(List.of()).stream()
+                .filter(a -> !Boolean.FALSE.equals(a.getActive()))
+                .sorted(Comparator.comparing(EventAddOn::getPosition, Comparator.nullsLast(Comparator.naturalOrder())))
+                .map(a -> {
+                    Map<String, Object> row = salesByAddOn.getOrDefault(a.getUuid(), Map.of());
+                    return DashboardRegistrationDTO.AddOnSalesDto.builder()
+                            .id(a.getUuid())
+                            .name(a.getName())
+                            .category(a.getCategory())
+                            .perApplicant(a.getPerApplicant())
+                            .quota(a.getQuota())
+                            .sold(row.get("sold") instanceof Number n ? n.intValue() : 0)
+                            .reserved(row.get("reserved") instanceof Number n ? n.intValue() : 0)
+                            .revenue(row.get("revenue") instanceof Number n ? n.doubleValue() : 0.0)
+                            .build();
+                })
+                .toList();
     }
 
     private String normalizeGender(Object gender) {

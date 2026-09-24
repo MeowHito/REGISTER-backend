@@ -6,9 +6,11 @@ import com.actionth.membership.constant.WebhookDescription;
 import com.actionth.membership.constant.WebhookLogType;
 import com.actionth.membership.constant.WebhookReasonType;
 import com.actionth.membership.model.*;
+import com.actionth.membership.model.dto.OrderAddOnDto;
 import com.actionth.membership.model.request.TemplateEmailRequest;
 import com.actionth.membership.repository.OrderRepository;
 import com.actionth.membership.repository.PaymentWebhookLogRepository;
+import com.actionth.membership.utils.AddOnUtils;
 import com.actionth.membership.utils.AgeGroupUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -782,6 +784,29 @@ public class PaymentWebhookService {
                 ? order.getCouponDiscount()
                 : totalCoupon;
         variables.put("totalCoupon", finalTotalCoupon);
+
+        // Same shape the registration-confirm email already uses for add-ons.
+        List<Map<String, Object>> addOns = new ArrayList<>();
+        double addOnTotal = 0.0;
+        if (order.getOrderAddOns() != null) {
+            for (OrderAddOn oa : order.getOrderAddOns()) {
+                if (Boolean.FALSE.equals(oa.getActive())) {
+                    continue;
+                }
+                OrderAddOnDto dto = AddOnUtils.toDto(oa);
+                Map<String, Object> ad = new HashMap<>();
+                ad.put("name", dto.getName());
+                ad.put("qty", dto.getQty());
+                ad.put("applicantName", dto.getApplicantName());
+                ad.put("note", dto.getNote());
+                ad.put("noteLabel", dto.getNoteLabel());
+                ad.put("totalPrice", dto.getTotalPrice() != null ? dto.getTotalPrice() : 0.0);
+                addOns.add(ad);
+                addOnTotal += dto.getTotalPrice() != null ? dto.getTotalPrice() : 0.0;
+            }
+        }
+        variables.put("addOns", addOns);
+        variables.put("addOnTotal", order.getAddOnTotal() != null ? order.getAddOnTotal() : addOnTotal);
 
         log.debug("[Email Applicants] Totals - regFee={}, shipping={}, discountNoShirt={}, coupon={}",
                 totalRegFee, totalShipping, totalDiscountNoShirt, finalTotalCoupon);

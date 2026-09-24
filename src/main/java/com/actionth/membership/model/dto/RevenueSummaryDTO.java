@@ -18,5 +18,6 @@ public class RevenueSummaryDTO {
     private BigDecimal total;
     private BigDecimal shippingFee;
     private BigDecimal totalWithShipping;
+    private BigDecimal addOnTotal;
 
 }

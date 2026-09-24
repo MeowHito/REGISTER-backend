@@ -511,4 +511,31 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
       """, nativeQuery = true)
   List<Map<String, Object>> countFailureReasons(@Param("eventUuid") String eventUuid, @Param("userId") Integer userId, @Param("isAdmin") boolean isAdmin);
 
+  /** Add-on units and revenue per add-on, split by payment state; same read gate as the other dashboard counts. */
+  @Query("""
+          SELECT a.uuid AS addOnId,
+                 SUM(CASE WHEN o.paymentStatus = 'SUCCESS' THEN oa.qty ELSE 0 END) AS sold,
+                 SUM(CASE WHEN o.paymentStatus IN ('PENDING', 'REVIEW') THEN oa.qty ELSE 0 END) AS reserved,
+                 SUM(CASE WHEN o.paymentStatus = 'SUCCESS' THEN oa.totalPrice ELSE 0 END) AS revenue
+          FROM OrderAddOn oa
+          JOIN oa.addOn a
+          JOIN oa.order o
+          JOIN o.event e
+          WHERE e.uuid = :eventUuid
+            AND (oa.active IS NULL OR oa.active = true)
+            AND (
+              :isAdmin = true
+              OR EXISTS (
+                  SELECT 1
+                  FROM EventPermission ep
+                  WHERE ep.event = e
+                    AND ep.user.uuid = :userUuid
+                    AND ep.canRead = true
+                    AND ep.active = true
+              )
+            )
+          GROUP BY a.uuid
+      """)
+  List<Map<String, Object>> sumAddOnSalesByEvent(@Param("eventUuid") String eventUuid,
+      @Param("userUuid") String userUuid, @Param("isAdmin") boolean isAdmin);
 }

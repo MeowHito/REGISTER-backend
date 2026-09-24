@@ -7,16 +7,24 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import javax.persistence.EntityManager;
 import javax.persistence.EntityNotFoundException;
+import javax.persistence.PersistenceContext;
+import javax.persistence.Tuple;
+import javax.persistence.criteria.CriteriaBuilder;
+import javax.persistence.criteria.CriteriaQuery;
+import javax.persistence.criteria.Root;
 import javax.persistence.criteria.Join;
 import javax.persistence.criteria.JoinType;
 import javax.persistence.criteria.Predicate;
@@ -58,6 +66,7 @@ import com.actionth.membership.model.dto.EventDetailDto;
 import com.actionth.membership.model.dto.EventDto;
 import com.actionth.membership.model.dto.EventPermissionSummaryDto;
 import com.actionth.membership.model.dto.EventSelectionFieldDto;
+import com.actionth.membership.model.dto.EventSummaryDto;
 import com.actionth.membership.model.dto.EventSelectionOptionDto;
 import com.actionth.membership.model.dto.EventTypeAvailabilityResponse;
 import com.actionth.membership.model.dto.EventTypeDto;
@@ -96,6 +105,9 @@ public class EventServiceImpl implements EventService {
 	private final ModelMapper modelMapper;
 	private final ContextUtils contextUtils;
 
+	@PersistenceContext
+	private EntityManager entityManager;
+
 	@Override
 	public EventDto getEventByUuid(String uuid) {
 		Event event = eventRepository.findByUuid(uuid)
@@ -119,7 +131,31 @@ public class EventServiceImpl implements EventService {
 				? generalRequest.getCreatedBy()
 				: null;
 
-		Specification<Event> searchSpec = (root, query, cb) -> {
+		Specification<Event> searchSpec = buildSearchSpec(generalRequest);
+
+		if (paging == null || paging.getPage() < 1) {
+			List<EventViewDto> dtos = eventRepository.findAll(
+					searchSpec,
+					Sort.by(Sort.Direction.DESC, "id")).stream()
+					.map(event -> mapViewEventToDto(event, createdBy))
+					.toList();
+			return new PageImpl<>(dtos);
+		} else {
+			Pageable pageable = PageRequest.of(
+					paging.getPage(),
+					paging.getSize(),
+					paging.getSortField() != null
+							? Sort.by(Sort.Direction.fromString(paging.getSortDirection()), paging.getSortField())
+							: Sort.by(Sort.Direction.DESC, "id"));
+
+			return eventRepository.findAll(searchSpec, pageable)
+					.map(event -> mapViewEventToDto(event, createdBy));
+		}
+	}
+
+	private Specification<Event> buildSearchSpec(GeneralRequest generalRequest) {
+		PagingData paging = generalRequest.getPaging();
+		return (root, query, cb) -> {
 			query.distinct(true);
 			List<Predicate> predicates = new ArrayList<>();
 
@@ -145,25 +181,49 @@ public class EventServiceImpl implements EventService {
 
 			return cb.and(predicates.toArray(new Predicate[0]));
 		};
+	}
 
-		if (paging == null || paging.getPage() < 1) {
-			List<EventViewDto> dtos = eventRepository.findAll(
-					searchSpec,
-					Sort.by(Sort.Direction.DESC, "id")).stream()
-					.map(event -> mapViewEventToDto(event, createdBy))
-					.toList();
-			return new PageImpl<>(dtos);
-		} else {
-			Pageable pageable = PageRequest.of(
-					paging.getPage(),
-					paging.getSize(),
-					paging.getSortField() != null
-							? Sort.by(Sort.Direction.fromString(paging.getSortDirection()), paging.getSortField())
-							: Sort.by(Sort.Direction.DESC, "id"));
-
-			return eventRepository.findAll(searchSpec, pageable)
-					.map(event -> mapViewEventToDto(event, createdBy));
+	/**
+	 * Stat-card counts over exactly the events the list would show the caller.
+	 * Selects only a few columns so the whole aggregate is not loaded per event.
+	 */
+	@Override
+	public EventSummaryDto summarize(GeneralRequest generalRequest) {
+		CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+		CriteriaQuery<Tuple> cq = cb.createTupleQuery();
+		Root<Event> root = cq.from(Event.class);
+		Predicate where = buildSearchSpec(generalRequest).toPredicate(root, cq, cb);
+		Join<Event, CountryState> province = root.join("province", JoinType.LEFT);
+		cq.multiselect(root.get("id"), root.get("isDraft"), root.get("endRegistrationDate"), province.get("id"));
+		if (where != null) {
+			cq.where(where);
 		}
+		cq.distinct(true);
+
+		OffsetDateTime now = OffsetDateTime.now();
+		long total = 0;
+		long published = 0;
+		long closed = 0;
+		Set<Object> provinces = new HashSet<>();
+		for (Tuple row : entityManager.createQuery(cq).getResultList()) {
+			total++;
+			if (!Boolean.TRUE.equals(row.get(1))) {
+				published++;
+			}
+			OffsetDateTime end = (OffsetDateTime) row.get(2);
+			if (end != null && end.isBefore(now)) {
+				closed++;
+			}
+			if (row.get(3) != null) {
+				provinces.add(row.get(3));
+			}
+		}
+		return EventSummaryDto.builder()
+				.total(total)
+				.published(published)
+				.closed(closed)
+				.provinces(provinces.size())
+				.build();
 	}
 
 	@Override
@@ -197,6 +257,54 @@ public class EventServiceImpl implements EventService {
 		applyDtoToEntity(dto, entity, false);
 		entity.setIsDraft(true);
 		Event saved = eventRepository.save(entity);
+		return mapEventToDto(saved);
+	}
+
+	/**
+	 * Copies an event's whole configuration (race types, pricing phases, shirts,
+	 * conditions, details, questions, add-ons, images) into a new draft. Nothing
+	 * that belongs to people is copied: participants, orders, coupons and the
+	 * collaborator list stay with the original. The URL slug is unique, so the
+	 * copy starts without one.
+	 */
+	@Override
+	public EventDto duplicateEvent(String uuid) {
+		Event source = eventRepository.findByUuid(uuid)
+				.orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+		assertCanModifyEvent(source, false);
+
+		EventDto dto = mapEventToDto(source);
+		dto.setId(null);
+		dto.setName((source.getName() != null ? source.getName() : "") + " (สำเนา)");
+		dto.setLink(null);
+		dto.setIsDraft(true);
+
+		// On create every child row is built fresh with a new uuid; the source
+		// uuids left on the child DTOs only let pricing find its payment phase.
+		Event copy = new Event();
+		applyDtoToEntity(dto, copy, false);
+		copy.setIsDraft(true);
+
+		// A collaborator who is not the organizer keeps the same access to the
+		// copy that they have on the original, or they could not open it.
+		Integer userId = contextUtils.getCurrentUserIdOrNull();
+		boolean isOrganizer = copy.getOrganizer() != null && Objects.equals(copy.getOrganizer().getId(), userId);
+		if (!isCurrentUserAdmin() && !isOrganizer && userId != null) {
+			source.getEventPermissions().stream()
+					.filter(p -> p.getUser() != null && userId.equals(p.getUser().getId())
+							&& !Boolean.FALSE.equals(p.getActive()))
+					.findFirst()
+					.ifPresent(mine -> {
+						EventPermission p = new EventPermission();
+						p.setEvent(copy);
+						p.setUser(mine.getUser());
+						p.setRole(mine.getRole());
+						p.syncBooleanFlags();
+						copy.getEventPermissions().add(p);
+					});
+		}
+
+		Event saved = eventRepository.save(copy);
 		return mapEventToDto(saved);
 	}
 

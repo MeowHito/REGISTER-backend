@@ -3,6 +3,7 @@ package com.actionth.membership.controller;
 import org.springframework.security.access.prepost.PreAuthorize;
 import com.actionth.membership.model.User;
 import com.actionth.membership.model.dto.EventDto;
+import com.actionth.membership.model.dto.EventSummaryDto;
 import com.actionth.membership.model.dto.EventViewDto;
 import com.actionth.membership.model.request.GeneralRequest;
 import com.actionth.membership.service.EventService;
@@ -37,6 +38,12 @@ public class EventController {
         return new Response<>(eventService.createEvent(dto), "Event created successfully", true);
     }
 
+    @PostMapping("/{uuid}/duplicate")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ORGANIZER')")
+    public Response<EventDto> duplicateEvent(@PathVariable String uuid) {
+        return new Response<>(eventService.duplicateEvent(uuid), "Event duplicated successfully", true);
+    }
+
     @PutMapping
     public Response<EventDto> updateEvent(@RequestBody EventDto dto) {
         return new Response<>(eventService.updateEvent(dto), "Event updated successfully", true);
@@ -55,6 +62,21 @@ public class EventController {
 
     @PostMapping("/getAllEvents")
     public Response<Page<EventViewDto>> getAllEvents(@RequestBody GeneralRequest generalRequest) {
+        scopeToCurrentOrganizer(generalRequest);
+
+        return new Response<>(
+                eventService.findAll(generalRequest),
+                "Events retrieved successfully", true);
+    }
+
+    @PostMapping("/summary")
+    public Response<EventSummaryDto> getEventSummary(@RequestBody GeneralRequest generalRequest) {
+        scopeToCurrentOrganizer(generalRequest);
+        return new Response<>(eventService.summarize(generalRequest), "Event summary retrieved successfully", true);
+    }
+
+    /** An organizer only ever sees the events they hold a permission on — same rule for list and stats. */
+    private void scopeToCurrentOrganizer(GeneralRequest generalRequest) {
         User user = userService.getCurrentUserSession();
 
         if (user != null && user.getRole() != null) {
@@ -63,10 +85,6 @@ public class EventController {
                 generalRequest.setCreatedBy(user.getId());
             }
         }
-
-        return new Response<>(
-                eventService.findAll(generalRequest),
-                "Events retrieved successfully", true);
     }
 
     @GetMapping("/getEventByOrganizer")

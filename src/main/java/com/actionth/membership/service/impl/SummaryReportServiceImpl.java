@@ -24,6 +24,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import com.actionth.membership.model.Event;
+import com.actionth.membership.model.OrderAddOn;
 import com.actionth.membership.model.EventType;
 import com.actionth.membership.model.OrderDetail;
 import com.actionth.membership.model.Orders;
@@ -34,9 +35,11 @@ import com.actionth.membership.model.dto.PageWithSummary;
 import com.actionth.membership.model.dto.RegistrantSummaryDTO;
 import com.actionth.membership.model.dto.RevenueDetailSummaryDTO;
 import com.actionth.membership.model.dto.RevenueSummaryDTO;
+import com.actionth.membership.repository.OrderAddOnRepository;
 import com.actionth.membership.repository.OrderDetailRepository;
 import com.actionth.membership.repository.OrderRepository;
 import com.actionth.membership.service.SummaryReportService;
+import com.actionth.membership.utils.AddOnUtils;
 
 import lombok.RequiredArgsConstructor;
 
@@ -47,6 +50,7 @@ public class SummaryReportServiceImpl implements SummaryReportService {
 
     private final OrderRepository orderRepository;
     private final OrderDetailRepository orderDetailRepository;
+    private final OrderAddOnRepository orderAddOnRepository;
 
     private BigDecimal safeBigDecimal(Object value) {
         return value != null ? new BigDecimal(value.toString()) : BigDecimal.ZERO;
@@ -88,6 +92,14 @@ public class SummaryReportServiceImpl implements SummaryReportService {
         return value.toString();
     }
 
+    /** Add-on money on one participant row; per-order add-ons sit on the order's first applicant. */
+    private BigDecimal addOnAmount(OrderDetail od) {
+        return AddOnUtils.forParticipant(od).stream()
+                .map(OrderAddOn::getTotalPrice)
+                .map(this::safeBigDecimal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
     private BigDecimal getServiceFeeRate(String paymentMethod) {
         if (paymentMethod == null || paymentMethod.trim().isEmpty())
             return BigDecimal.ZERO;
@@ -127,7 +139,43 @@ public class SummaryReportServiceImpl implements SummaryReportService {
         datas.put("datas", sheetData);
         formatData.add(datas);
 
+        List<Map<String, Object>> addOnResults = orderAddOnRepository.summarizeAddOnFinance(eventUuid, startDate,
+                endDate);
+        if (!addOnResults.isEmpty()) {
+            Map<String, Object> addOnSheet = new HashMap<>();
+            addOnSheet.put("sheetName", "สินค้าเสริม");
+            addOnSheet.put("columns",
+                    new String[] { "ลำดับ", "สินค้าเสริม", "ราคาต่อหน่วย", "จำนวน", "จำนวนเงิน (THB)" });
+            addOnSheet.put("preHeader", List.of("ชื่ออีเว้นท์", eventName));
+
+            List<List<String>> addOnRows = new ArrayList<>();
+            int addOnIndex = 1;
+            for (Map<String, Object> result : addOnResults) {
+                List<String> row = new ArrayList<>();
+                row.add(String.valueOf(addOnIndex++));
+                row.add(optString(result.get("name")));
+                row.add(formatDecimal(result.get("unitPrice")));
+                row.add(optString(result.get("qty")));
+                row.add(formatDecimal(result.get("total")));
+                addOnRows.add(row);
+            }
+            addOnSheet.put("datas", addOnRows);
+            formatData.add(addOnSheet);
+        }
+
         return formatData;
+    }
+
+    @Override
+    public List<FinanceSummaryDTO> getFinanceAddOnSummary(String eventUuid, OffsetDateTime startDate,
+            OffsetDateTime endDate) {
+        return orderAddOnRepository.summarizeAddOnFinance(eventUuid, startDate, endDate).stream()
+                .map(map -> new FinanceSummaryDTO(
+                        optString(map.get("name")),
+                        safeBigDecimal(map.get("unitPrice")),
+                        safeBigDecimal(map.get("qty")),
+                        safeBigDecimal(map.get("total"))))
+                .toList();
     }
 
     @Override
@@ -153,7 +201,8 @@ public class SummaryReportServiceImpl implements SummaryReportService {
                 safeBigDecimal(summaryMap.get("totalAmount")),
                 safeBigDecimal(summaryMap.get("totalNetAmount")),
                 safeBigDecimal(summaryMap.get("totalServiceFee")),
-                safeBigDecimal(summaryMap.get("totalAmountWithFee")));
+                safeBigDecimal(summaryMap.get("totalAmountWithFee")),
+                safeBigDecimal(summaryMap.get("totalAddOn")));
 
         Page<FinanceSummaryDTO> page = new PageImpl<>(dtoList);
 
@@ -172,10 +221,12 @@ public class SummaryReportServiceImpl implements SummaryReportService {
 
                     BigDecimal registrationFee = safeBigDecimal(row.get("registrationFee"));
                     BigDecimal shippingFee = safeBigDecimal(row.get("shippingFee"));
+                    BigDecimal addOnTotal = safeBigDecimal(row.get("addOnTotal"));
                     String paymentMethod = optString(row.get("paymentMethod"));
                     BigDecimal serviceFeeRate = getServiceFeeRate(paymentMethod);
-                    BigDecimal serviceFee = registrationFee.multiply(serviceFeeRate);
-                    BigDecimal total = registrationFee.add(serviceFee);
+                    // Action's fee applies to add-ons at the same rate as registration.
+                    BigDecimal serviceFee = registrationFee.add(addOnTotal).multiply(serviceFeeRate);
+                    BigDecimal total = registrationFee.add(addOnTotal).add(serviceFee);
                     BigDecimal totalWithShipping = total.add(shippingFee);
 
                     RevenueSummaryDTO dto = new RevenueSummaryDTO();
@@ -187,6 +238,7 @@ public class SummaryReportServiceImpl implements SummaryReportService {
                     dto.setTotal(total);
                     dto.setShippingFee(shippingFee);
                     dto.setTotalWithShipping(totalWithShipping);
+                    dto.setAddOnTotal(addOnTotal);
                     return dto;
                 })
                 .toList();
@@ -276,7 +328,9 @@ public class SummaryReportServiceImpl implements SummaryReportService {
             BigDecimal discountCoupon = safeBigDecimal(od.getCouponDiscount());
             BigDecimal discountShirt = safeBigDecimal(od.getDiscountShirt());
             BigDecimal shippingFee = safeBigDecimal(od.getShippingFee());
-            BigDecimal netPrice = price.subtract(discountCoupon).subtract(discountShirt).add(shippingFee);
+            BigDecimal addOnTotal = addOnAmount(od);
+            BigDecimal netPrice = price.subtract(discountCoupon).subtract(discountShirt).add(shippingFee)
+                    .add(addOnTotal);
             String paymentMethod = od.getOrder().getPaymentMethod();
             BigDecimal serviceFeeRate = getServiceFeeRate(paymentMethod);
             BigDecimal serviceFee = netPrice.multiply(serviceFeeRate);
@@ -299,7 +353,8 @@ public class SummaryReportServiceImpl implements SummaryReportService {
                     od.getEventType().getName(),
                     od.getOrder().getPaymentStatus(),
                     paymentMethod,
-                    formatDateTime(od.getOrder().getCreatedTime()));
+                    formatDateTime(od.getOrder().getCreatedTime()),
+                    addOnTotal);
         });
     }
 
@@ -371,7 +426,9 @@ public class SummaryReportServiceImpl implements SummaryReportService {
 
         Page<OrderDetail> result = orderDetailRepository.findAll(spec, pageable);
 
-        return result.map(od -> new RegistrantSummaryDTO(
+        return result.map(od -> {
+            BigDecimal addOnTotal = addOnAmount(od);
+            return new RegistrantSummaryDTO(
                 od.getUuid(),
                 od.getOrder().getEvent().getName(),
                 od.getOrder().getOrderNo(),
@@ -385,11 +442,14 @@ public class SummaryReportServiceImpl implements SummaryReportService {
                 safeBigDecimal(od.getPrice())
                         .subtract(safeBigDecimal(od.getCouponDiscount()))
                         .subtract(safeBigDecimal(od.getDiscountShirt()))
-                        .add(safeBigDecimal(od.getShippingFee())),
+                        .add(safeBigDecimal(od.getShippingFee()))
+                        .add(addOnTotal),
                 od.getEventType().getName(),
                 od.getOrder().getPaymentStatus(),
                 od.getOrder().getPaymentMethod(),
-                formatDateTime(od.getOrder().getCreatedTime())));
+                formatDateTime(od.getOrder().getCreatedTime()),
+                addOnTotal);
+        });
     }
 
     @Override
@@ -397,7 +457,7 @@ public class SummaryReportServiceImpl implements SummaryReportService {
             OffsetDateTime startDate, OffsetDateTime endDate) {
         String[] columns = { "order id", "ID Payment (transaction id)", "วันที่เวลาชำระเงินสำเร็จ",
                 "ชื่อ-นามสกุลผู้ลงทะเบียน", "ค่าสมัคร", "ส่วนลดคูปอง", "ส่วนลดไม่รับเสื้อ", "ค่าจัดส่ง",
-                "ยอดสุทธิ", "ประเภท", "สถานะ", "ช่องทางชำระเงิน", "วันที่ลงทะเบียน" };
+                "สินค้าเสริม", "ยอดสุทธิ", "ประเภท", "สถานะ", "ช่องทางชำระเงิน", "วันที่ลงทะเบียน" };
 
         List<Map<String, Object>> results = orderRepository.summarizeRegistrant(eventUuid, startDate, endDate);
         List<Map<String, Object>> formatData = new ArrayList<>();
@@ -416,7 +476,9 @@ public class SummaryReportServiceImpl implements SummaryReportService {
             BigDecimal discountCoupon = safeBigDecimal(result.get("discountCoupon"));
             BigDecimal discountShirt = safeBigDecimal(result.get("discountShirt"));
             BigDecimal shippingFee = safeBigDecimal(result.get("shippingFee"));
-            BigDecimal totalAmount = registrationFee.subtract(discountCoupon).subtract(discountShirt).add(shippingFee);
+            BigDecimal addOnTotal = safeBigDecimal(result.get("addOnTotal"));
+            BigDecimal totalAmount = registrationFee.subtract(discountCoupon).subtract(discountShirt).add(shippingFee)
+                    .add(addOnTotal);
 
             row.add(optString(result.get("orderId")));
             row.add(optString(result.get("transactionId")));
@@ -426,6 +488,7 @@ public class SummaryReportServiceImpl implements SummaryReportService {
             row.add(formatDecimal(result.get("discountCoupon")));
             row.add(formatDecimal(result.get("discountShirt")));
             row.add(formatDecimal(result.get("shippingFee")));
+            row.add(formatDecimal(addOnTotal));
             row.add(formatDecimal(totalAmount));
             row.add(optString(result.get("eventTypeName")));
             row.add(optString(result.get("paymentStatus")));
@@ -442,7 +505,7 @@ public class SummaryReportServiceImpl implements SummaryReportService {
 
     @Override
     public List<Map<String, Object>> getSummarizeRevenue(OffsetDateTime startDate, OffsetDateTime endDate) {
-        String[] columns = { "เลขที่สัญญา", "อีเว้นท์", "ช่องทางรับชำระเงิน", "ค่าสมัครวิ่ง",
+        String[] columns = { "เลขที่สัญญา", "อีเว้นท์", "ช่องทางรับชำระเงิน", "ค่าสมัครวิ่ง", "สินค้าเสริม",
                 "ค่าธรรมเนียมงานวิ่งที่เก็บเข้าระบบ Action", "ยอดรวม", "ค่าส่ง", "ยอดรวม + ค่าส่ง" };
 
         List<Map<String, Object>> results = orderRepository.summarizeRevenue(startDate, endDate);
@@ -457,10 +520,11 @@ public class SummaryReportServiceImpl implements SummaryReportService {
         for (Map<String, Object> result : results) {
             BigDecimal registrationFee = safeBigDecimal(result.get("registrationFee"));
             BigDecimal shippingFee = safeBigDecimal(result.get("shippingFee"));
+            BigDecimal addOnTotal = safeBigDecimal(result.get("addOnTotal"));
             String paymentMethod = optString(result.get("paymentMethod"));
             BigDecimal serviceFeeRate = getServiceFeeRate(paymentMethod);
-            BigDecimal serviceFee = registrationFee.multiply(serviceFeeRate);
-            BigDecimal total = registrationFee.add(serviceFee);
+            BigDecimal serviceFee = registrationFee.add(addOnTotal).multiply(serviceFeeRate);
+            BigDecimal total = registrationFee.add(addOnTotal).add(serviceFee);
             BigDecimal totalWithShipping = total.add(shippingFee);
 
             List<String> dataRow = new ArrayList<>();
@@ -468,6 +532,7 @@ public class SummaryReportServiceImpl implements SummaryReportService {
             dataRow.add(optString(result.get("eventName")));
             dataRow.add(paymentMethod);
             dataRow.add(formatDecimal(registrationFee));
+            dataRow.add(formatDecimal(addOnTotal));
             dataRow.add(formatDecimal(serviceFee));
             dataRow.add(formatDecimal(total));
             dataRow.add(formatDecimal(shippingFee));
@@ -486,7 +551,8 @@ public class SummaryReportServiceImpl implements SummaryReportService {
     public List<Map<String, Object>> getSummarizeRevenueDetail(String eventUuid, String eventName,
             OffsetDateTime startDate, OffsetDateTime endDate) {
         String[] columns = { "order id", "ID Payment (transaction id)", "วันที่เวลาชำระเงินสำเร็จ",
-                "ชื่อ-นามสกุลผู้ลงทะเบียน", "ค่าสมัคร", "ส่วนลดคูปอง", "ส่วนลดไม่รับเสื้อ", "ค่าจัดส่ง", "ยอดสุทธิ",
+                "ชื่อ-นามสกุลผู้ลงทะเบียน", "ค่าสมัคร", "ส่วนลดคูปอง", "ส่วนลดไม่รับเสื้อ", "ค่าจัดส่ง", "สินค้าเสริม",
+                "ยอดสุทธิ",
                 "ค่าธรรมเนียม", "รวมค่าธรรมเนียม", "ประเภท", "ช่องทางชำระเงิน", "วันที่ลงทะเบียน" };
 
         List<Map<String, Object>> results = orderRepository.summarizeRevenueDetail(eventUuid, startDate, endDate);
@@ -505,7 +571,9 @@ public class SummaryReportServiceImpl implements SummaryReportService {
             BigDecimal discountCoupon = safeBigDecimal(result.get("discountCoupon"));
             BigDecimal discountShirt = safeBigDecimal(result.get("discountShirt"));
             BigDecimal shippingFee = safeBigDecimal(result.get("shippingFee"));
-            BigDecimal netPrice = price.subtract(discountCoupon).subtract(discountShirt).add(shippingFee);
+            BigDecimal addOnTotal = safeBigDecimal(result.get("addOnTotal"));
+            BigDecimal netPrice = price.subtract(discountCoupon).subtract(discountShirt).add(shippingFee)
+                    .add(addOnTotal);
             String paymentMethod = optString(result.get("paymentMethod"));
             BigDecimal serviceFeeRate = getServiceFeeRate(paymentMethod);
             BigDecimal serviceFee = netPrice.multiply(serviceFeeRate);
@@ -519,6 +587,7 @@ public class SummaryReportServiceImpl implements SummaryReportService {
             row.add(formatDecimal(result.get("discountCoupon")));
             row.add(formatDecimal(result.get("discountShirt")));
             row.add(formatDecimal(result.get("shippingFee")));
+            row.add(formatDecimal(addOnTotal));
             row.add(formatDecimal(netPrice));
             row.add(formatDecimal(serviceFee));
             row.add(formatDecimal(total));

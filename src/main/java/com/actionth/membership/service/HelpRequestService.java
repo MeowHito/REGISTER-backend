@@ -1,5 +1,6 @@
 package com.actionth.membership.service;
 
+import com.actionth.membership.constant.NotificationType;
 import com.actionth.membership.exception.ResourceNotFoundException;
 import com.actionth.membership.model.HelpRequest;
 import com.actionth.membership.model.Orders;
@@ -28,6 +29,7 @@ public class HelpRequestService {
     private final HelpRequestRepository helpRequestRepository;
     private final OrderRepository orderRepository;
     private final EmailService emailService;
+    private final NotificationService notificationService;
 
     public HelpRequestDto createHelpRequest(HelpRequestRequest request) {
         Orders order = orderRepository.findByUuid(request.getOrderUuid())
@@ -42,6 +44,13 @@ public class HelpRequestService {
         help.setAttachmentUrl(request.getAttachmentUrl());
 
         helpRequestRepository.save(help);
+
+        String snippet = request.getMessage() != null && request.getMessage().length() > 120
+                ? request.getMessage().substring(0, 120) + "…"
+                : request.getMessage();
+        notificationService.notifyAdmins(NotificationType.HELP_REQUEST, "มีคำขอความช่วยเหลือใหม่",
+                "ออเดอร์ " + order.getOrderNo() + (snippet != null && !snippet.isBlank() ? " · " + snippet : ""),
+                "/backoffice/operations?tab=helpRequests");
 
         // Send confirmation email to the requester
         try {

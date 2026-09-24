@@ -170,6 +170,23 @@
                         </td>
                     </tr>
                 </th:block>
+
+                <!-- Add-ons (hotel, photo package, ...) -->
+                <tr th:each="ad : ${addOns}">
+                    <td>
+                        <div>
+                            <strong th:text="'สินค้าเสริม: ' + (${ad['name']} ?: '-')">Add-on</strong>
+                        </div>
+                        <div style="font-size: 0.9em; color: #555;">
+                            <span th:text="'จำนวน: ' + ${ad['qty']}">Qty</span>
+                            <span th:if="${ad['applicantName'] != null and ad['applicantName'] != ''}" th:text="' | ผู้สมัคร: ' + ${ad['applicantName']}"></span>
+                            <span th:if="${ad['note'] != null and ad['note'] != ''}" th:text="' | ' + (${ad['noteLabel'] != null and ad['noteLabel'] != ''} ? ${ad['noteLabel']} : 'หมายเหตุ') + ': ' + ${ad['note']}"></span>
+                        </div>
+                    </td>
+                    <td class="text-right">
+                        <span th:text="${#numbers.formatDecimal(ad['totalPrice'] != null ? ad['totalPrice'] : 0, 1, 'COMMA', 2, 'POINT')}">0.00</span>
+                    </td>
+                </tr>
                 
                 <!-- Spacer Row to visually separate items from totals -->
                 <tr>

@@ -1,5 +1,7 @@
 package com.actionth.membership.service.impl;
 
+import com.actionth.membership.service.NotificationService;
+import com.actionth.membership.constant.NotificationType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -49,6 +51,7 @@ public class EventPermissionServiceImpl implements EventPermissionService {
     private final UserRepository userRepository;
     private final EmailService emailService;
     private final UserService userService;
+    private final NotificationService notificationService;
 
     @Override
     public Page<EventPermissionDto> getEventPermissionsByEvent(String eventUuid, PagingData pagingData) {
@@ -161,10 +164,13 @@ public class EventPermissionServiceImpl implements EventPermissionService {
                         .findByEventUuidAndUserUuid(eventId, p.getUserId());
 
                 EventPermission ep;
+                boolean newlyGranted;
                 if (existing.isPresent()) {
                     ep = existing.get();
+                    newlyGranted = !Boolean.TRUE.equals(ep.getActive());
                     ep.setActive(true);
                 } else {
+                    newlyGranted = true;
                     User user = userRepository.findByUuid(p.getUserId())
                             .orElseThrow(() -> new BusinessException("User not found: " + p.getUserId()));
                     ep = new EventPermission();
@@ -176,6 +182,11 @@ public class EventPermissionServiceImpl implements EventPermissionService {
                 ep.setRole(p.getRole());
                 ep.syncBooleanFlags();
                 eventPermissionRepository.save(ep);
+                if (newlyGranted) {
+                    notificationService.notifyUser(ep.getUser().getId(), NotificationType.EVENT_PERMISSION_GRANTED,
+                            "คุณได้รับสิทธิ์ร่วมจัดการอีเว้นท์",
+                            event.getName() + " · สิทธิ์: " + p.getRole(), "/backoffice/eventList");
+                }
             }
         }
 
@@ -267,6 +278,10 @@ public class EventPermissionServiceImpl implements EventPermissionService {
                     .active(true)
                     .build();
             eventInvitationRepository.save(invitation);
+
+            userOpt.ifPresent(invitee -> notificationService.notifyUser(invitee.getId(),
+                    NotificationType.EVENT_INVITED, "คุณได้รับคำเชิญร่วมจัดการอีเว้นท์",
+                    event.getName() + " · เชิญโดย " + inviterName, "/invite/accept?token=" + token));
 
             try {
                 emailService.sendInviteEmail(

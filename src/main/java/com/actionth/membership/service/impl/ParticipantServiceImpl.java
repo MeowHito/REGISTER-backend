@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.actionth.membership.exception.ResourceNotFoundException;
 import com.actionth.membership.model.EventSelectionField;
+import com.actionth.membership.model.OrderAddOn;
 import com.actionth.membership.model.OrderDetail;
 import com.actionth.membership.model.PagingData;
 import com.actionth.membership.model.ShirtSize;
@@ -44,6 +45,7 @@ import com.actionth.membership.repository.ShirtSizeRepository;
 import com.actionth.membership.repository.UserRepository;
 import com.actionth.membership.service.EventTypeService;
 import com.actionth.membership.service.ParticipantService;
+import com.actionth.membership.utils.AddOnUtils;
 import com.actionth.membership.utils.AgeGroupUtils;
 import com.actionth.membership.utils.ContextUtils;
 
@@ -403,6 +405,9 @@ public class ParticipantServiceImpl implements ParticipantService {
         dto.setEmergencyContact(participant.getEmergencyContact());
         dto.setEmergencyRelation(participant.getEmergencyRelation());
         dto.setEmergencyPhone(participant.getEmergencyPhone());
+        dto.setAddOns(AddOnUtils.forParticipant(participant).stream()
+                .map(AddOnUtils::toDto)
+                .toList());
 
         return dto;
     }
@@ -461,8 +466,32 @@ public class ParticipantServiceImpl implements ParticipantService {
             }
             List<String> questionList = new ArrayList<>(questionTitles);
 
+            // One column per add-on (quantity), plus a note column when the
+            // organizer gave that add-on a note field — same idea as questions.
+            LinkedHashMap<String, String> addOnColumns = new LinkedHashMap<>();
+            LinkedHashMap<String, String> addOnNoteColumns = new LinkedHashMap<>();
+            for (OrderDetail participant : participants) {
+                for (OrderAddOn oa : AddOnUtils.forParticipant(participant)) {
+                    String key = addOnKey(oa);
+                    addOnColumns.putIfAbsent(key, "สินค้าเสริม: " + Objects.toString(oa.getName(), "-"));
+                    String noteLabel = oa.getAddOn() != null ? oa.getAddOn().getNoteLabel() : null;
+                    if ((noteLabel != null && !noteLabel.isBlank())
+                            || (oa.getNote() != null && !oa.getNote().isBlank())) {
+                        addOnNoteColumns.putIfAbsent(key, "สินค้าเสริม: " + Objects.toString(oa.getName(), "-")
+                                + " - " + (noteLabel != null && !noteLabel.isBlank() ? noteLabel : "หมายเหตุ"));
+                    }
+                }
+            }
+            List<String> addOnKeys = new ArrayList<>(addOnColumns.keySet());
+
             List<String> allColumns = new ArrayList<>(Arrays.asList(baseColumns));
             allColumns.addAll(questionList);
+            for (String key : addOnKeys) {
+                allColumns.add(addOnColumns.get(key));
+                if (addOnNoteColumns.containsKey(key)) {
+                    allColumns.add(addOnNoteColumns.get(key));
+                }
+            }
 
             Map<String, Object> allParticipant = new HashMap<>();
             allParticipant.put("sheetName", result.get("name"));
@@ -524,6 +553,20 @@ public class ParticipantServiceImpl implements ParticipantService {
                     row.add(values != null ? String.join(", ", values) : "");
                 }
 
+                Map<String, List<OrderAddOn>> addOnMap = AddOnUtils.forParticipant(participant).stream()
+                        .collect(Collectors.groupingBy(this::addOnKey, LinkedHashMap::new, Collectors.toList()));
+                for (String key : addOnKeys) {
+                    List<OrderAddOn> bought = addOnMap.getOrDefault(key, List.of());
+                    int qty = bought.stream().mapToInt(oa -> oa.getQty() != null ? oa.getQty() : 0).sum();
+                    row.add(bought.isEmpty() ? "" : String.valueOf(qty));
+                    if (addOnNoteColumns.containsKey(key)) {
+                        row.add(bought.stream()
+                                .map(OrderAddOn::getNote)
+                                .filter(n -> n != null && !n.isBlank())
+                                .collect(Collectors.joining(", ")));
+                    }
+                }
+
                 sheetData.add(row);
             }
 
@@ -531,6 +574,11 @@ public class ParticipantServiceImpl implements ParticipantService {
             formatData.add(allParticipant);
         }
         return formatData;
+    }
+
+    /** Groups by the organizer's add-on; falls back to the snapshotted name if it was deleted. */
+    private String addOnKey(OrderAddOn oa) {
+        return oa.getAddOn() != null ? oa.getAddOn().getUuid() : "name:" + Objects.toString(oa.getName(), "");
     }
 
     private Map<String, List<String>> buildAnswerMap(OrderDetail participant) {

@@ -8,12 +8,15 @@ import org.springframework.data.domain.Page;
 
 import com.actionth.membership.model.dto.EventDto;
 import com.actionth.membership.model.dto.EventTypeAvailabilityResponse;
+import com.actionth.membership.model.dto.EventSummaryDto;
 import com.actionth.membership.model.dto.EventViewDto;
 import com.actionth.membership.model.request.GeneralRequest;
 
 public interface EventService {
 
     Page<EventViewDto> findAll(GeneralRequest generalRequest);
+
+    EventSummaryDto summarize(GeneralRequest generalRequest);
 
     EventDto getEventByUuid(String uuid);
 
@@ -22,6 +25,8 @@ public interface EventService {
     List<OffsetDateTime> getAllEventDatesInMonth(OffsetDateTime date);
 
     EventDto createEvent(EventDto dto);
+
+    EventDto duplicateEvent(String uuid);
 
     EventDto updateEvent(EventDto dto);
 

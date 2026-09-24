@@ -1,5 +1,6 @@
 package com.actionth.membership.service.impl;
 
+import com.actionth.membership.service.NotificationService;
 import com.actionth.membership.exception.ResourceNotFoundException;
 import com.actionth.membership.exception.ValidationException;
 import com.actionth.membership.model.PagingData;
@@ -65,6 +66,7 @@ public class UserServiceImpl implements UserService {
     private final ModelMapper modelMapper;
     private final RoleRepository roleRepository;
     private final ContextUtils contextUtils;
+    private final NotificationService notificationService;
 
     @Override
     public Page<UserViewDto> findAll(GeneralRequest generalRequest) {
@@ -169,6 +171,9 @@ public class UserServiceImpl implements UserService {
         user.setRole(role);
 
         User saved = userRepository.save(user);
+        if ("organizer".equalsIgnoreCase(userDto.getRole())) {
+            notificationService.organizerPending(saved);
+        }
         return mapUserToDto(saved);
     }
 

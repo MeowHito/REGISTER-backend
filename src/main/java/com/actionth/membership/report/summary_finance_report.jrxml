@@ -37,8 +37,11 @@
 		<parameter name="startDate" class="java.lang.String"/>
 		<parameter name="endDate" class="java.lang.String"/>
 		<queryString>
-			<![CDATA[SELECT q.name, q.unitPrice, SUM(q.qty) AS qty, (q.unitPrice * SUM(q.qty)) AS total
+			<![CDATA[SELECT rpt.name, rpt.unitPrice, rpt.qty, rpt.total
 FROM (
+ SELECT q.name, q.unitPrice, SUM(q.qty) AS qty, (q.unitPrice * SUM(q.qty)) AS total,
+        0 AS sortGroup, q.eventTypeId AS sort1, q.pricingId AS sort2
+ FROM (
                     SELECT od.id, et.id AS eventTypeId, od.pricingId, CONCAT(et.name, ' ', pt.name) AS name, pc.price AS unitPrice, 1 AS qty
                     FROM action_membership.orders o
                     JOIN action_membership.event e ON o.eventId = e.id
@@ -59,8 +62,20 @@ FROM (
                     AND o.createdTime BETWEEN $P{startDate} AND $P{endDate} 
                     AND o.paymentStatus = 'SUCCESS'
  ) AS q
- GROUP BY q.eventTypeId, q.pricingId, q.unitPrice
- ORDER BY q.eventTypeId, q.pricingId]]>
+ GROUP BY q.eventTypeId, q.pricingId, q.unitPrice, q.name
+ UNION ALL
+ SELECT CONCAT('สินค้าเสริม: ', oa.name) AS name, oa.unitPrice, SUM(oa.qty) AS qty, SUM(oa.totalPrice) AS total,
+        1 AS sortGroup, MIN(oa.id) AS sort1, NULL AS sort2
+ FROM action_membership.orderAddOn oa
+ JOIN action_membership.orders o ON oa.orderId = o.id
+ JOIN action_membership.event e ON o.eventId = e.id
+ WHERE e.uuid =  $P{id} 
+ AND o.createdTime BETWEEN $P{startDate} AND $P{endDate} 
+ AND o.paymentStatus = 'SUCCESS'
+ AND (oa.active IS NULL OR oa.active = 1)
+ GROUP BY oa.addOnId, oa.name, oa.unitPrice
+) AS rpt
+ORDER BY rpt.sortGroup, rpt.sort1, rpt.sort2]]>
 		</queryString>
 		<field name="name" class="java.lang.String">
 			<property name="com.jaspersoft.studio.field.name" value="name"/>

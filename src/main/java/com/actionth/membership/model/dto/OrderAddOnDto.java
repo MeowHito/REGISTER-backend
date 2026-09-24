@@ -17,6 +17,8 @@ public class OrderAddOnDto {
     private String applicantName;
     private String name;
     private String nameEn;
+    /** The organizer's label for {@link #note}, e.g. "วันเช็คอิน". */
+    private String noteLabel;
     private Double unitPrice;
     private Integer qty;
     private Double totalPrice;

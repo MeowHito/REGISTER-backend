@@ -12,6 +12,8 @@ import javax.persistence.*;
 import org.hibernate.annotations.LazyCollection;
 import org.hibernate.annotations.LazyCollectionOption;
 
+import com.actionth.membership.event.OrderStatusListener;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 
@@ -25,6 +27,7 @@ import java.time.OffsetDateTime;
 @AllArgsConstructor
 @SuperBuilder
 @Table(name = "orders")
+@EntityListeners(OrderStatusListener.class)
 @JsonIgnoreProperties({ "hibernateLazyInitializer", "handler" })
 @EqualsAndHashCode(callSuper = true)
 public class Orders extends StandardFields {
@@ -80,4 +83,11 @@ public class Orders extends StandardFields {
     @Builder.Default
     @Column(name = "correctionEmailSent")
     private Boolean correctionEmailSent = false;
+
+    /** Status as last loaded/saved; lets {@link OrderStatusListener} see transitions. Not a column. */
+    @Transient
+    @JsonIgnore
+    @lombok.ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private String loadedPaymentStatus;
 }
