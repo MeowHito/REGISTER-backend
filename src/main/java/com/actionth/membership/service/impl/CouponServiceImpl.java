@@ -115,6 +115,14 @@ public class CouponServiceImpl implements CouponService {
                         "%" + pagingData.getSearchText().toLowerCase() + "%"));
             }
 
+            // search: [{ searchField: "eventId", searchText: <event uuid> }] scopes the list to one event.
+            if (pagingData != null && pagingData.getSearch() != null) {
+                pagingData.getSearch().stream()
+                        .filter(s -> "eventId".equals(s.getSearchField()) && s.getSearchText() != null)
+                        .findFirst()
+                        .ifPresent(s -> predicates.add(cb.equal(event.get("uuid"), s.getSearchText())));
+            }
+
             Subquery<Long> subquery = query.subquery(Long.class);
             Root<Coupon> subRoot = subquery.from(Coupon.class);
             subquery.select(cb.greatest(subRoot.get("id").as(Long.class)));

@@ -83,25 +83,27 @@ public class DataLoader implements CommandLineRunner {
 			List<Menu> menus = List.of(
 					Menu.builder().title("dashboard").path("/dashboard").icon("DashboardOutlined")
 							.isDisplay(true).isNoti(false).position(0).build(),
-					Menu.builder().title("historyList").path("/historyList").icon("HistoryOutlined")
+					Menu.builder().title("eventStats").path("/eventStats").icon("PieChartOutlined")
 							.isDisplay(true).isNoti(false).position(1).build(),
-					Menu.builder().title("eventList").path("/eventList").icon("CalendarOutlined")
+					Menu.builder().title("historyList").path("/historyList").icon("HistoryOutlined")
 							.isDisplay(true).isNoti(false).position(2).build(),
-					Menu.builder().title("couponList").path("/couponList").icon("GiftOutlined")
+					Menu.builder().title("eventList").path("/eventList").icon("CalendarOutlined")
 							.isDisplay(true).isNoti(false).position(3).build(),
+					Menu.builder().title("couponList").path("/couponList").icon("GiftOutlined")
+							.isDisplay(true).isNoti(false).position(4).build(),
 					Menu.builder().title("announcementList").path("/announcementList").icon("SoundOutlined")
-							.isDisplay(true).isNoti(true).badgeKey("announcement").position(4).build(),
+							.isDisplay(true).isNoti(true).badgeKey("announcement").position(5).build(),
 					Menu.builder().title("eventCalendarList").path("/eventCalendarList")
 							.icon("NotificationOutlined").isDisplay(true).isNoti(true).badgeKey("eventCalendar")
-							.position(5).build(),
+							.position(6).build(),
 					Menu.builder().title("contractList").path("/contractList").icon("FileDoneOutlined")
-							.isDisplay(true).isNoti(false).position(6).build(),
-					Menu.builder().title("reportList").path("/reportList").icon("BarChartOutlined")
 							.isDisplay(true).isNoti(false).position(7).build(),
+					Menu.builder().title("reportList").path("/reportList").icon("BarChartOutlined")
+							.isDisplay(true).isNoti(false).position(8).build(),
 					Menu.builder().title("setting").path("/setting").icon("SettingOutlined").isDisplay(true)
-							.isNoti(false).position(8).build(),
+							.isNoti(false).position(9).build(),
 					Menu.builder().title("operations").path("/operations").icon("ToolOutlined").isDisplay(true)
-							.isNoti(false).position(9).build());
+							.isNoti(false).position(10).build());
 			menuRepository.saveAll(menus);
 		}
 

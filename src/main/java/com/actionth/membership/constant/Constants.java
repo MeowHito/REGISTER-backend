@@ -14,7 +14,7 @@ public class Constants {
     public static final String USER_NOT_FOUND = "ไม่พบผู้ใช้ในระบบ/รหัสผ่านไม่ถูกต้อง";
     public static final String PROVIDER_SEAL_PATH = "/stamp.png";
 
-    public static final List<String> ADMIN_MENU = List.of("eventList", "dashboard", "contractList", "announcementList", "eventCalendarList", "couponList", "reportList", "historyList", "setting", "operations");
-    public static final List<String> ORGANIZER_MENU = List.of("eventList", "dashboard", "contractList", "announcementList", "eventCalendarList", "couponList", "historyList", "setting");
+    public static final List<String> ADMIN_MENU = List.of("eventList", "dashboard", "eventStats", "contractList", "announcementList", "eventCalendarList", "couponList", "reportList", "historyList", "setting", "operations");
+    public static final List<String> ORGANIZER_MENU = List.of("eventList", "dashboard", "eventStats", "contractList", "announcementList", "eventCalendarList", "couponList", "historyList", "setting");
     public static final List<String> GUEST_MENU = List.of("historyList", "setting");
 }
