@@ -19,6 +19,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -30,6 +31,8 @@ import org.springframework.web.util.UriUtils;
 import com.actionth.membership.response.Response;
 import com.actionth.membership.service.AWSService;
 import com.actionth.membership.service.CouponService;
+import com.actionth.membership.service.EventAccessService;
+import com.actionth.membership.service.EventAccessService.Access;
 import com.actionth.membership.service.EventService;
 import com.actionth.membership.service.ExcelGeneratorService;
 import com.actionth.membership.service.ParticipantService;
@@ -38,6 +41,9 @@ import com.actionth.membership.service.SummaryReportService;
 @RestController
 @RequestMapping("/api/file")
 public class FileController {
+
+	@Autowired
+	private EventAccessService eventAccessService;
 
 	@Autowired
 	private ParticipantService participantService;
@@ -103,6 +109,8 @@ public class FileController {
 
 	@GetMapping("/downloadParticipant")
 	public ResponseEntity<byte[]> downloadParticipant(@RequestParam("id") String id) {
+		// Outside the try below, which would turn a denial into a 200 JSON body.
+		eventAccessService.assertCanByEventUuid(id, Access.READ);
 		HttpHeaders headers = new HttpHeaders();
 		headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
 		headers.setAccessControlExposeHeaders(ExcelGeneratorService.ACCESS_HEADERS);
@@ -132,6 +140,7 @@ public class FileController {
 		return new ResponseEntity<>(body, headers, HttpStatus.OK);
 	}
 
+	@PreAuthorize("hasRole('ADMIN')")
 	@GetMapping("/exportSummaryFinanceExcel")
 	public ResponseEntity<byte[]> exportSummaryFinanceExcel(@RequestParam("id") String id,
 			@RequestParam("startDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime startDate,
@@ -166,6 +175,7 @@ public class FileController {
 		return new ResponseEntity<>(body, headers, HttpStatus.OK);
 	}
 
+	@PreAuthorize("hasRole('ADMIN')")
 	@GetMapping("/exportSummaryRegistrantExcel")
 	public ResponseEntity<byte[]> exportSummaryRegistrantExcel(
 			@RequestParam(value = "id", required = false) String id,
@@ -201,6 +211,7 @@ public class FileController {
 		return new ResponseEntity<>(body, headers, HttpStatus.OK);
 	}
 
+	@PreAuthorize("hasRole('ADMIN')")
 	@GetMapping("/exportSummaryRevenueExcel")
 	public ResponseEntity<byte[]> exportSummaryRevenueExcel(
 			@RequestParam("startDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime startDate,
@@ -232,6 +243,7 @@ public class FileController {
 		return new ResponseEntity<>(body, headers, HttpStatus.OK);
 	}
 
+	@PreAuthorize("hasRole('ADMIN')")
 	@GetMapping("/exportSummaryRevenueDetailExcel")
 	public ResponseEntity<byte[]> exportSummaryRevenueDetailExcel(
 			@RequestParam(value = "id", required = false) String id,

@@ -77,7 +77,7 @@ public class NotificationService {
                 + Objects.toString(organizer.getLastName(), "")).trim();
         notifyAdmins(NotificationType.ORGANIZER_PENDING, "มีผู้จัดงานสมัครใหม่รออนุมัติ",
                 (name.isEmpty() ? "" : name + " · ") + Objects.toString(organizer.getEmail(), ""),
-                "/backoffice/operations?tab=pendingOrganizers");
+                "/operations?tab=pendingOrganizers");
     }
 
     // ---------------------------------------------------------------- deliver
@@ -148,7 +148,7 @@ public class NotificationService {
                         NotificationType.ORDER_PAID,
                         "มีผู้สมัครชำระเงินใหม่",
                         eventName + " · ออเดอร์ " + order.getOrderNo() + " · " + applicants + " คน",
-                        "/backoffice/eventList"));
+                        "/eventList"));
             }
             return;
         }
@@ -156,10 +156,10 @@ public class NotificationService {
         String reason = order.getReviewReason() != null ? " (" + order.getReviewReason() + ")" : "";
         String message = eventName + " · ออเดอร์ " + order.getOrderNo() + reason;
         save(new NotificationEvent(Set.of(), true, null, NotificationType.ORDER_REVIEW,
-                "ออเดอร์รอตรวจสอบการชำระเงิน", message, "/backoffice/operations?tab=paymentMismatch"));
+                "ออเดอร์รอตรวจสอบการชำระเงิน", message, "/operations?tab=paymentMismatch"));
         if (organizer != null && !isAdmin(organizer)) {
             save(new NotificationEvent(Set.of(organizer.getId()), false, null, NotificationType.ORDER_REVIEW,
-                    "ออเดอร์รอตรวจสอบการชำระเงิน", message, "/backoffice/eventList"));
+                    "ออเดอร์รอตรวจสอบการชำระเงิน", message, "/eventList"));
         }
     }
 

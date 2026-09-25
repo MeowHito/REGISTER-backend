@@ -18,7 +18,11 @@ import com.actionth.membership.model.request.OrderUpdateRequest.RunnerCouponDto;
 import com.actionth.membership.model.request.OrderAddOnRequest;
 import com.actionth.membership.model.request.OrderDetailRequest;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -43,7 +47,9 @@ import com.actionth.membership.repository.OrderAddOnRepository;
 import com.actionth.membership.repository.OrderDetailRepository;
 import com.actionth.membership.repository.OrderRequestLogRepository;
 import com.actionth.membership.repository.ShirtTypeRepository;
+import com.actionth.membership.service.CouponService;
 import com.actionth.membership.service.OrderService;
+import com.actionth.membership.projection.PricingAvailabilityProjection;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -52,6 +58,7 @@ import com.actionth.membership.model.OrderRequestLog;
 import com.actionth.membership.repository.ShirtSizeRepository;
 import com.actionth.membership.repository.PricingRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.actionth.membership.constant.PaymentFee;
 import com.actionth.membership.constant.PaymentStatus;
 import com.actionth.membership.exception.QuotaExceededException;
 import com.actionth.membership.exception.ResourceNotFoundException;
@@ -78,6 +85,7 @@ public class OrderServiceImpl implements OrderService {
     private final EventAddOnRepository eventAddOnRepository;
     private final OrderAddOnRepository orderAddOnRepository;
     private final CouponRepository couponRepository;
+    private final CouponService couponService;
     private final ModelMapper modelMapper;
 
     private final EventTypeRepository eventTypeRepository;
@@ -240,6 +248,7 @@ public class OrderServiceImpl implements OrderService {
             // The order details now have ids, so a per-applicant add-on can
             // safely reference the runner it belongs to.
             attachAddOns(savedOrder, orderRequest);
+            priceOrder(savedOrder, orderRequest, correlationId);
             savedOrder = orderRepository.save(savedOrder);
             long processingTime = System.currentTimeMillis() - startTime;
             log.info("[CreateOrder] correlationId={}, Order created successfully: orderNo={}, orderId={}, processingTimeMs={}", 
@@ -492,6 +501,106 @@ public class OrderServiceImpl implements OrderService {
                         .build());
             }
         }
+
+        for (OrderDetailRequest req : orderRequest.getOrderDetails()) {
+            if (req.getEventTypeId() != null) {
+                assertCurrentPricing(req.getEventTypeId(), req.getPricingId());
+            }
+        }
+    }
+
+    /**
+     * The runner pays the price phase that is on sale now (what the availability endpoint offers),
+     * or the standard price when no phase is open. Anything else — a closed Early Bird, a later
+     * phase, another distance's pricing — is rejected with PRICING_EXPIRED, which the registration
+     * page already turns into a "price changed, please choose again" dialog.
+     */
+    private void assertCurrentPricing(String eventTypeUuid, String requestedPricingId) {
+        EventType eventType = eventTypeRepository.findByUuid(eventTypeUuid)
+                .orElseThrow(() -> new ResourceNotFoundException("EventType not found: " + eventTypeUuid));
+        List<PricingAvailabilityProjection> open = pricingRepository.findAvailablePricingWithQuota(eventType.getId());
+        String currentPricingId = open.isEmpty() ? null : open.get(0).getPricingUuid();
+        if (Objects.equals(currentPricingId, requestedPricingId)) {
+            return;
+        }
+
+        String pricingName = requestedPricingId == null ? "Standard"
+                : pricingRepository.findByUuid(requestedPricingId)
+                        .map(Pricing::getPaymentType)
+                        .map(PaymentType::getName)
+                        .orElse(null);
+        throw new QuotaExceededException(QuotaValidationError.builder()
+                .eventTypeName(eventType.getName())
+                .pricingName(pricingName)
+                .isSpecialPrice(requestedPricingId != null)
+                .availableQuota(0)
+                .requestedQuota(1)
+                .errorCode("PRICING_EXPIRED")
+                .message("ราคาที่เลือกไม่ใช่ราคาที่เปิดขายอยู่ในขณะนี้ กรุณาเลือกใหม่")
+                .build());
+    }
+
+    /**
+     * Snapshot what each runner pays from the organizer's configuration; the request's money
+     * fields are ignored (only logged when they disagree). Coupon and service fee come later, in
+     * updateOrderPayment, once a payment method is chosen. Shipping is charged once per order.
+     */
+    private void priceOrder(Orders order, OrderRequest request, String correlationId) {
+        Event event = order.getEvent();
+        BigDecimal eventShippingFee = event.getShippingFee() != null ? event.getShippingFee() : BigDecimal.ZERO;
+        BigDecimal registration = BigDecimal.ZERO;
+        BigDecimal shipping = BigDecimal.ZERO;
+        boolean shippingCharged = false;
+
+        for (OrderDetail od : order.getOrderDetails()) {
+            EventType eventType = od.getEventType();
+            if (eventType == null || eventType.getEvent() == null
+                    || !Objects.equals(eventType.getEvent().getId(), event.getId())) {
+                throw new IllegalArgumentException("ประเภทการแข่งขันไม่ตรงกับงานที่สมัคร");
+            }
+            Pricing pricing = od.getPricing();
+            if (pricing != null && (pricing.getEventType() == null
+                    || !Objects.equals(pricing.getEventType().getId(), eventType.getId()))) {
+                throw new IllegalArgumentException("ราคาที่เลือกไม่ตรงกับประเภทการแข่งขัน");
+            }
+
+            BigDecimal price = pricing != null ? pricing.getPrice() : eventType.getPrice();
+            price = price != null ? price : BigDecimal.ZERO;
+            BigDecimal detailShipping = BigDecimal.ZERO;
+            if (!shippingCharged && "post".equalsIgnoreCase(od.getDeliveryMethod())) {
+                detailShipping = eventShippingFee;
+                shippingCharged = true;
+            }
+
+            od.setPrice(price.doubleValue());
+            od.setDiscountShirt(0.0); // the registration flow offers no "no shirt" option
+            od.setCouponDiscount(0.0);
+            od.setCouponUsed(false);
+            od.setShippingFee(detailShipping.doubleValue());
+            od.setNetPrice(price.add(detailShipping).doubleValue());
+
+            registration = registration.add(price);
+            shipping = shipping.add(detailShipping);
+        }
+
+        BigDecimal addOns = BigDecimal.valueOf(order.getAddOnTotal() != null ? order.getAddOnTotal() : 0.0);
+        BigDecimal total = registration.add(shipping).add(addOns);
+
+        order.setUnitPrice(registration.doubleValue());
+        order.setShippingFee(shipping.doubleValue());
+        order.setDiscountShirt(0.0);
+        order.setCoupon(null);
+        order.setCouponDiscount(0.0);
+        order.setFee(0.0);
+        order.setFeePercent(0.0);
+        order.setTotalPrice(total.doubleValue());
+        order.setTotalAmountWithFee(total.doubleValue());
+
+        if (request.getTotalPrice() != null && total.subtract(BigDecimal.valueOf(request.getTotalPrice())).abs()
+                .compareTo(new BigDecimal("0.01")) >= 0) {
+            log.warn("[CreateOrder] correlationId={}, Client total {} differs from server total {} - using server total",
+                    correlationId, request.getTotalPrice(), total);
+        }
     }
 
     @Override
@@ -566,36 +675,32 @@ public class OrderServiceImpl implements OrderService {
             
             orderNo = order.getOrderNo();
 
-            String code = request.getCouponCode();
-            String codeType = request.getCouponType();
+            // Public endpoint: never let it rewrite the money or coupon of a paid/closed order.
+            if (!PaymentStatus.PENDING.toString().equalsIgnoreCase(order.getPaymentStatus())) {
+                throw new IllegalArgumentException("ออเดอร์นี้ไม่อยู่ในสถานะรอชำระเงิน");
+            }
+
+            String code = request.getCouponCode() != null && !request.getCouponCode().isBlank()
+                    ? request.getCouponCode().trim() : null;
             String previousCoupon = order.getCoupon();
 
+            // Money is recomputed from the prices snapshotted at create time; the request's
+            // totals, fee and per-runner discounts are ignored.
             order.setPaymentMethod(request.getPaymentMethod());
-            order.setCouponDiscount(request.getCouponDiscount());
-            order.setCoupon(code);
-            order.setTotalPrice(request.getTotalPrice());
-            order.setFee(request.getFee());
-            order.setFeePercent(request.getFeePercent());
-            order.setTotalAmountWithFee(request.getTotalAmountWithFee());
+            CouponResult coupon = applyCoupon(order, code, correlationId);
+            BigDecimal totalAmountWithFee = applyTotals(order, request, correlationId);
 
             boolean testMode = order.getEvent() != null && Boolean.TRUE.equals(order.getEvent().getTestMode());
             boolean skipPayment = false;
             if (testMode) {
-                if (!PaymentStatus.PENDING.toString().equalsIgnoreCase(order.getPaymentStatus())) {
-                    throw new IllegalArgumentException("Order is not pending: " + order.getPaymentStatus());
-                }
                 log.info("[UpdatePayment] correlationId={}, Event is in test mode - skipping payment, orderNo={}",
                         correlationId, orderNo);
                 order.setPaymentMethod(TEST_MODE_PAYMENT_METHOD);
                 skipPayment = true;
-            } else if (request.getTotalAmountWithFee() != null && request.getTotalAmountWithFee() == 0) {
-                skipPayment = validateFreeOrder(order, code, codeType, correlationId);
-                if (!skipPayment) {
-                    log.warn("[UpdatePayment] correlationId={}, Client sent totalAmountWithFee=0 but server validation failed - rejecting free order, orderNo={}",
-                            correlationId, orderNo);
-                    throw new IllegalArgumentException(
-                            "Invalid free order: server-side validation failed. The coupon does not cover the full order amount.");
-                }
+            } else if (totalAmountWithFee.signum() == 0) {
+                log.info("[UpdatePayment] correlationId={}, Server total is 0 (free event or full coupon), orderNo={}",
+                        correlationId, orderNo);
+                skipPayment = true;
             }
 
             if (skipPayment) {
@@ -608,84 +713,13 @@ public class OrderServiceImpl implements OrderService {
             orderRepository.save(order);
             
             log.debug("[UpdatePayment] correlationId={}, Order payment details updated: orderNo={}, totalAmount={}", 
-                    correlationId, order.getOrderNo(), request.getTotalAmountWithFee());
+                    correlationId, order.getOrderNo(), totalAmountWithFee);
 
-            boolean couponChanged = !Objects.equals(previousCoupon, code);
-            if (couponChanged && previousCoupon != null && !previousCoupon.isBlank()) {
+            if (!Objects.equals(previousCoupon, code) && previousCoupon != null && !previousCoupon.isBlank()) {
                 releasePreviousCoupons(order, previousCoupon, correlationId);
             }
-
-            if (code != null && !code.isBlank() && codeType != null && !codeType.isBlank()) {
-                log.debug("[UpdatePayment] correlationId={}, Processing coupon: code={}, type={}", 
-                        correlationId, code, codeType);
-                        
-                if (codeType.matches("(?i)internal|external")) {
-                    for (RunnerCouponDto rc : request.getRunnerCoupons()) {
-                        OrderDetail od = orderDetailRepository.findByOrderIdAndIdNo(order.getId(), rc.getIdNo())
-                                .orElseThrow(
-                                        () -> {
-                                            log.error("[UpdatePayment] correlationId={}, Runner not found: idNo={}", 
-                                                    correlationId, rc.getIdNo());
-                                            return new IllegalArgumentException("Runner not found in order: " + rc.getIdNo());
-                                        });
-                        couponRepository.findFirstByCouponCodeAndRedeemByIsNullAndRunnerIdNo(code, rc.getIdNo())
-                                .ifPresent(coupon -> {
-                                    if (coupon.getRedeemBy() == null) {
-                                        coupon.setRedeemBy(od);
-                                        coupon.setRedeemTime(OffsetDateTime.now());
-                                        couponRepository.save(coupon);
-                                        log.info("[UpdatePayment] correlationId={}, Coupon redeemed: code={}, runnerId={}", 
-                                                correlationId, code, rc.getIdNo());
-                                    }
-                                });
-                    }
-                } else {
-                    Optional<Coupon> existing = couponRepository.findByCouponCodeAndRedeemBy_Id(code,
-                            order.getOrderDetails().get(0).getId());
-                    if (existing.isPresent()) {
-                        log.debug("[UpdatePayment] correlationId={}, Coupon already redeemed for this order: code={}", 
-                                correlationId, code);
-                    } else {
-                        couponRepository.findFirstByCouponCodeAndRedeemByIsNull(code).ifPresent(coupon -> {
-                            if (coupon.getRedeemBy() == null && order.getOrderDetails() != null
-                                    && !order.getOrderDetails().isEmpty()) {
-                                coupon.setRedeemBy(order.getOrderDetails().get(0));
-                            }
-                            if (coupon.getRedeemTime() == null) {
-                                coupon.setRedeemTime(OffsetDateTime.now());
-                            }
-                            couponRepository.save(coupon);
-                            log.info("[UpdatePayment] correlationId={}, Coupon redeemed: code={}", 
-                                    correlationId, code);
-                        });
-                    }
-                }
-            }
-
-            if (request.getRunnerCoupons() != null && !request.getRunnerCoupons().isEmpty()) {
-                for (RunnerCouponDto rc : request.getRunnerCoupons()) {
-                    OrderDetail od = orderDetailRepository.findByOrderIdAndIdNo(order.getId(), rc.getIdNo())
-                            .orElseThrow(() -> {
-                                log.error("[UpdatePayment] correlationId={}, Runner not found for discount update: idNo={}", 
-                                        correlationId, rc.getIdNo());
-                                return new IllegalArgumentException("Runner not found in order: " + rc.getIdNo());
-                            });
-                    od.setCouponDiscount(rc.getCouponDiscount());
-                    od.setCouponUsed(rc.getCouponDiscount() != null && rc.getCouponDiscount() > 0);
-                    od.setNetPrice(rc.getNetPrice());
-                    orderDetailRepository.save(od);
-                }
-                log.debug("[UpdatePayment] correlationId={}, Runner discounts updated: runnersCount={}", 
-                        correlationId, request.getRunnerCoupons().size());
-            } else if (couponChanged && (code == null || code.isBlank()) && order.getOrderDetails() != null) {
-                for (OrderDetail od : order.getOrderDetails()) {
-                    od.setCouponDiscount(0.0);
-                    od.setCouponUsed(false);
-                    od.setNetPrice(od.getPrice());
-                    orderDetailRepository.save(od);
-                }
-                log.info("[UpdatePayment] correlationId={}, Coupon removed with empty runnerCoupons — reset {} detail rows", 
-                        correlationId, order.getOrderDetails().size());
+            if (code != null) {
+                redeemCoupons(order, code, coupon, correlationId);
             }
             
 
@@ -730,81 +764,117 @@ public class OrderServiceImpl implements OrderService {
         }
     }
 
-    private boolean validateFreeOrder(Orders order, String couponCode, String couponType, String correlationId) {
-        double totalBasePrice = order.getOrderDetails().stream()
-                .mapToDouble(od -> od.getPrice() != null ? od.getPrice() : 0.0)
-                .sum();
+    /** Which runners a coupon discounts, and its type (internal/external coupons are per runner idNo). */
+    private record CouponResult(Set<Integer> detailIds, String type) {
+        static final CouponResult NONE = new CouponResult(Set.of(), null);
+    }
 
-        if (totalBasePrice == 0.0) {
-            log.info("[ValidateFreeOrder] correlationId={}, Event is free (totalBasePrice=0), no coupon required, orderNo={}",
-                    correlationId, order.getOrderNo());
-            return true;
-        }
+    /**
+     * Re-validates the coupon server-side (same rules as /api/coupon/validateCoupon) and writes
+     * each runner's discount: deductionPercentage of (price - shirt discount), shipping excluded,
+     * rounded half-up to the satang — the same formula RegistrationPayment shows.
+     */
+    private CouponResult applyCoupon(Orders order, String code, String correlationId) {
+        List<OrderDetail> details = order.getOrderDetails() != null ? order.getOrderDetails() : List.of();
+        CouponResult result = CouponResult.NONE;
+        BigDecimal percent = BigDecimal.ZERO;
 
-        if (couponCode == null || couponCode.isBlank()) {
-            log.warn("[ValidateFreeOrder] correlationId={}, No coupon code provided but totalBasePrice={}, orderNo={}",
-                    correlationId, totalBasePrice, order.getOrderNo());
-            return false;
-        }
-
-        String eventUuid = order.getEvent() != null ? order.getEvent().getUuid() : null;
-        if (eventUuid == null) {
-            log.warn("[ValidateFreeOrder] correlationId={}, Order has no event, orderNo={}",
-                    correlationId, order.getOrderNo());
-            return false;
-        }
-
-        List<Coupon> coupons = couponRepository.findAllByCouponCodeAndEventIdAndStatusAndRedeemByIsNullOrOrderUuid(
-                couponCode, eventUuid, "approved", order.getUuid());
-
-        if (coupons.isEmpty()) {
-            log.warn("[ValidateFreeOrder] correlationId={}, No valid approved coupon found: code={}, eventUuid={}, orderNo={}",
-                    correlationId, couponCode, eventUuid, order.getOrderNo());
-            return false;
-        }
-
-        OffsetDateTime now = OffsetDateTime.now();
-        boolean hasValid100PercentCoupon = coupons.stream().anyMatch(coupon -> {
-            if (coupon.getDeductionPercentage() == null || coupon.getDeductionPercentage() != 100L || 
-                (coupon.getStartTime() != null && now.isBefore(coupon.getStartTime())) || 
-                (coupon.getExpiryTime() != null && now.isAfter(coupon.getExpiryTime()))) {
-                return false;
+        if (code != null) {
+            List<String> idNos = details.stream().map(od -> od.getIdNo() != null ? od.getIdNo().trim() : "").toList();
+            Map<String, Object> validation = couponService.validateCoupon(code, order.getEvent().getUuid(), idNos,
+                    order.getUuid());
+            @SuppressWarnings("unchecked")
+            Map<String, Boolean> validIdNos = validation.get("idNo") instanceof Map<?, ?> m
+                    ? (Map<String, Boolean>) m : Map.of();
+            Set<Integer> eligible = new HashSet<>();
+            for (OrderDetail od : details) {
+                if (od.getIdNo() != null && Boolean.TRUE.equals(validIdNos.get(od.getIdNo().trim()))) {
+                    eligible.add(od.getId());
+                }
             }
-            return true;
-        });
-
-        if (!hasValid100PercentCoupon) {
-            log.warn("[ValidateFreeOrder] correlationId={}, No coupon with 100% deduction found or coupon expired: code={}, orderNo={}",
-                    correlationId, couponCode, order.getOrderNo());
-            return false;
-        }
-
-        double expectedCouponDiscount = totalBasePrice;
-        double expectedTotalAfterDiscount = totalBasePrice - expectedCouponDiscount;
-        double expectedFee = expectedTotalAfterDiscount * (order.getFeePercent() != null ? order.getFeePercent() / 100.0 : 0.0);
-        double expectedTotalWithFee = expectedTotalAfterDiscount + expectedFee;
-
-        if (expectedTotalWithFee != 0.0) {
-            log.warn("[ValidateFreeOrder] correlationId={}, Recalculated total is not 0: expectedTotalWithFee={}, totalBasePrice={}, orderNo={}",
-                    correlationId, expectedTotalWithFee, totalBasePrice, order.getOrderNo());
-            return false;
-        }
-
-        int runnerCount = order.getOrderDetails() != null ? order.getOrderDetails().size() : 0;
-        long availableCoupons = coupons.stream()
-                .filter(c -> c.getDeductionPercentage() != null && c.getDeductionPercentage() == 100L)
-                .count();
-
-        if (couponType != null && couponType.matches("(?i)internal|external") && availableCoupons < runnerCount) {
-                log.warn("[ValidateFreeOrder] correlationId={}, Not enough coupons for all runners: available={}, runners={}, orderNo={}",
-                        correlationId, availableCoupons, runnerCount, order.getOrderNo());
-                return false;
+            if (!"success".equals(validation.get("status")) || eligible.isEmpty()) {
+                log.warn("[UpdatePayment] correlationId={}, Coupon rejected by server validation: code={}, orderNo={}",
+                        correlationId, code, order.getOrderNo());
+                throw new IllegalArgumentException("คูปองนี้ใช้ไม่ได้ หรือถูกใช้ไปแล้ว");
             }
-        
+            Object deduction = validation.get("deductionPercentage");
+            percent = deduction instanceof Number n ? BigDecimal.valueOf(n.doubleValue()) : BigDecimal.ZERO;
+            result = new CouponResult(eligible, (String) validation.get("type"));
+        }
 
-        log.info("[ValidateFreeOrder] correlationId={}, Free order validated successfully: code={}, deduction=100%, orderNo={}",
-                correlationId, couponCode, order.getOrderNo());
-        return true;
+        BigDecimal orderDiscount = BigDecimal.ZERO;
+        for (OrderDetail od : details) {
+            BigDecimal price = money(od.getPrice());
+            BigDecimal shirtDiscount = money(od.getDiscountShirt());
+            boolean eligible = result.detailIds().contains(od.getId());
+            BigDecimal discount = eligible
+                    ? price.subtract(shirtDiscount).max(BigDecimal.ZERO).multiply(percent)
+                            .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO;
+            od.setCouponDiscount(discount.doubleValue());
+            od.setCouponUsed(eligible);
+            od.setNetPrice(price.subtract(shirtDiscount).subtract(discount).add(money(od.getShippingFee())).doubleValue());
+            orderDiscount = orderDiscount.add(discount);
+        }
+
+        order.setCoupon(code);
+        order.setCouponDiscount(orderDiscount.doubleValue());
+        return result;
+    }
+
+    /** Order total, service fee and amount to charge, from the runners' net prices plus add-ons. */
+    private BigDecimal applyTotals(Orders order, OrderUpdateRequest request, String correlationId) {
+        BigDecimal total = money(order.getAddOnTotal());
+        for (OrderDetail od : order.getOrderDetails() != null ? order.getOrderDetails() : List.<OrderDetail>of()) {
+            total = total.add(money(od.getNetPrice()));
+        }
+        BigDecimal feePercent = PaymentFee.percentFor(request.getPaymentMethod());
+        BigDecimal fee = PaymentFee.feeOn(total, feePercent);
+        BigDecimal totalAmountWithFee = total.add(fee);
+
+        order.setTotalPrice(total.doubleValue());
+        order.setFeePercent(feePercent.doubleValue());
+        order.setFee(fee.doubleValue());
+        order.setTotalAmountWithFee(totalAmountWithFee.doubleValue());
+
+        if (request.getTotalAmountWithFee() != null && totalAmountWithFee
+                .subtract(BigDecimal.valueOf(request.getTotalAmountWithFee())).abs()
+                .compareTo(new BigDecimal("0.01")) >= 0) {
+            log.warn("[UpdatePayment] correlationId={}, Client amount {} differs from server amount {} - charging server amount, orderNo={}",
+                    correlationId, request.getTotalAmountWithFee(), totalAmountWithFee, order.getOrderNo());
+        }
+        return totalAmountWithFee;
+    }
+
+    /**
+     * Marks coupon rows as used by the runners they discounted. Internal/external coupons are
+     * issued per runner idNo; any other coupon code has one row per use, so each discounted runner
+     * takes one row.
+     */
+    private void redeemCoupons(Orders order, String code, CouponResult coupon, String correlationId) {
+        boolean perRunner = coupon.type() != null && coupon.type().matches("(?i)internal|external");
+        for (OrderDetail od : order.getOrderDetails()) {
+            if (!coupon.detailIds().contains(od.getId())) {
+                continue;
+            }
+            if (couponRepository.findByCouponCodeAndRedeemBy_Id(code, od.getId()).isPresent()) {
+                continue; // already redeemed by this runner on an earlier attempt
+            }
+            Optional<Coupon> row = perRunner
+                    ? couponRepository.findFirstByCouponCodeAndRedeemByIsNullAndRunnerIdNo(code, od.getIdNo())
+                    : couponRepository.findFirstByCouponCodeAndRedeemByIsNull(code);
+            row.ifPresent(c -> {
+                c.setRedeemBy(od);
+                c.setRedeemTime(OffsetDateTime.now());
+                couponRepository.save(c);
+                log.info("[UpdatePayment] correlationId={}, Coupon redeemed: code={}, orderNo={}, runnerId={}",
+                        correlationId, code, order.getOrderNo(), od.getUuid());
+            });
+        }
+    }
+
+    private static BigDecimal money(Double value) {
+        return value != null ? BigDecimal.valueOf(value) : BigDecimal.ZERO;
     }
 
     private void releasePreviousCoupons(Orders order, String previousCouponCode, String correlationId) {

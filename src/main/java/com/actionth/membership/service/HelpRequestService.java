@@ -50,7 +50,7 @@ public class HelpRequestService {
                 : request.getMessage();
         notificationService.notifyAdmins(NotificationType.HELP_REQUEST, "มีคำขอความช่วยเหลือใหม่",
                 "ออเดอร์ " + order.getOrderNo() + (snippet != null && !snippet.isBlank() ? " · " + snippet : ""),
-                "/backoffice/operations?tab=helpRequests");
+                "/operations?tab=helpRequests");
 
         // Send confirmation email to the requester
         try {

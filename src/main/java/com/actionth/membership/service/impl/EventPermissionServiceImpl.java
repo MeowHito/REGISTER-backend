@@ -185,7 +185,7 @@ public class EventPermissionServiceImpl implements EventPermissionService {
                 if (newlyGranted) {
                     notificationService.notifyUser(ep.getUser().getId(), NotificationType.EVENT_PERMISSION_GRANTED,
                             "คุณได้รับสิทธิ์ร่วมจัดการอีเว้นท์",
-                            event.getName() + " · สิทธิ์: " + p.getRole(), "/backoffice/eventList");
+                            event.getName() + " · สิทธิ์: " + p.getRole(), "/eventList");
                 }
             }
         }

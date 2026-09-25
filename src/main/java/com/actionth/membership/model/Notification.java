@@ -39,7 +39,7 @@ public class Notification extends StandardFields {
     @Column(length = 500)
     private String message;
 
-    /** Back-office path to open when clicked, e.g. "/backoffice/helpRequests". */
+    /** Back-office path to open when clicked, e.g. "/helpRequests". */
     @Column(length = 500)
     private String link;
 

@@ -85,6 +85,7 @@ import com.actionth.membership.repository.OrderDetailRepository;
 import com.actionth.membership.repository.PricingRepository;
 import com.actionth.membership.repository.OrderAddOnRepository;
 import com.actionth.membership.repository.UserRepository;
+import com.actionth.membership.service.EventAccessService;
 import com.actionth.membership.service.EventService;
 import com.actionth.membership.utils.ContextUtils;
 import com.actionth.membership.utils.SearchPredicateBuilder;
@@ -97,6 +98,7 @@ import lombok.RequiredArgsConstructor;
 public class EventServiceImpl implements EventService {
 
 	private final EventRepository eventRepository;
+	private final EventAccessService eventAccessService;
 	private final EventCalendarRepository eventCalendarRepository;
 	private final UserRepository userRepository;
 	private final OrderDetailRepository orderDetailRepository;
@@ -558,33 +560,7 @@ public class EventServiceImpl implements EventService {
 	 * caller's EventPermission, and delete needs canDelete.
 	 */
 	private void assertCanModifyEvent(Event event, boolean deleting) {
-		if (isCurrentUserAdmin()) {
-			return;
-		}
-
-		Integer userId = contextUtils.getCurrentUserIdOrNull();
-		if (userId == null) {
-			throw new org.springframework.security.access.AccessDeniedException("Unauthenticated");
-		}
-
-		EventPermission permission = event.getEventPermissions().stream()
-				.filter(p -> p.getUser() != null && userId.equals(p.getUser().getId())
-						&& !Boolean.FALSE.equals(p.getActive()))
-				.findFirst()
-				.orElse(null);
-
-		boolean allowed;
-		if (deleting) {
-			allowed = permission != null && Boolean.TRUE.equals(permission.getCanDelete());
-		} else {
-			boolean isOwner = event.getOrganizer() != null && userId.equals(event.getOrganizer().getId());
-			allowed = isOwner || (permission != null && Boolean.TRUE.equals(permission.getCanUpdate()));
-		}
-
-		if (!allowed) {
-			throw new org.springframework.security.access.AccessDeniedException(
-					"No permission to " + (deleting ? "delete" : "update") + " this event");
-		}
+		eventAccessService.assertCan(event, deleting ? EventAccessService.Access.DELETE : EventAccessService.Access.UPDATE);
 	}
 
 	private boolean isCurrentUserAdmin() {

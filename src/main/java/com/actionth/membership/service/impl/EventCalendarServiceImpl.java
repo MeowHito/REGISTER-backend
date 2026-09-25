@@ -109,7 +109,7 @@ public class EventCalendarServiceImpl implements EventCalendarService {
         notificationService.notifyAdmins(NotificationType.EVENT_CALENDAR_SUBMITTED, "มีการฝากปฏิทินกิจกรรมใหม่",
                 event.getEventName()
                         + (event.getSubmitterName() != null ? " · โดย " + event.getSubmitterName() : ""),
-                "/backoffice/eventCalendarList");
+                "/eventCalendarList");
     }
 
     @Override

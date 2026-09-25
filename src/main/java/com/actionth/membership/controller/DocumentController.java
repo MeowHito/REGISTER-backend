@@ -38,6 +38,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -220,6 +221,7 @@ public class DocumentController {
         return new ResponseEntity<>(zipBytes, headers, HttpStatus.OK);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/getSummaryFinanceDocument")
     public ResponseEntity<byte[]> getSummaryFinanceDocument(
             @RequestBody SummaryFinanceRequestDTO req)

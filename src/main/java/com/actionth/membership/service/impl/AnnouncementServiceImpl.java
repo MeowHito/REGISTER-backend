@@ -195,7 +195,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         announcementRepository.save(announcement);
         notificationService.notifyAdmins(NotificationType.ANNOUNCEMENT_SUBMITTED, "มีการฝากข่าวประชาสัมพันธ์ใหม่",
                 event.getName() + (announcement.getTitle() != null ? " · " + announcement.getTitle() : ""),
-                "/backoffice/announcementList");
+                "/announcementList");
 
         // เพิ่มรูปที่แนบมากับ announcement
         if (announcementDTO.getMediaFiles() != null && !announcementDTO.getMediaFiles().isEmpty()) {

@@ -18,6 +18,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.actionth.membership.service.EventAccessService;
+import com.actionth.membership.service.EventAccessService.Access;
 import com.actionth.membership.model.PagingData;
 import com.actionth.membership.model.dto.BibDocumentDTO;
 import com.actionth.membership.model.dto.ParticipantDTO;
@@ -51,10 +53,14 @@ public class ParticipantController {
     @Autowired
     private EmailService emailService;
 
+    @Autowired
+    private EventAccessService eventAccessService;
+
     @GetMapping
     public Response<Page<ParticipantDTO>> getParticipantsWithPagination(
             @RequestParam("id") String id,
             @RequestParam(value = "paging", required = false) String pagingJson) throws JsonProcessingException {
+        eventAccessService.assertCanByEventUuid(id, Access.READ);
         PagingData paging = null;
         if (pagingJson != null) {
             paging = mapper.readValue(pagingJson, PagingData.class);
@@ -64,24 +70,34 @@ public class ParticipantController {
 
     @GetMapping("/{id}")
     public Response<ParticipantDTO> getParticipantById(@PathVariable String id) {
+        eventAccessService.assertCanByParticipantUuid(id, Access.READ);
         return new Response<>(participantService.findParticipantByUuid(id), "Participants retrieved successfully",
                 true);
     }
 
     @PutMapping("/updateParticipant")
     public Response<Void> updateParticipant(@Valid @RequestBody ParticipantDTORequest participantDTO) {
+        eventAccessService.assertCanByParticipantUuid(participantDTO.getId(), Access.UPDATE);
         participantService.updateParticipant(participantDTO);
         return new Response<>(null, "User updated successfully", true);
     }
 
     @PutMapping("/uploadParticipant")
     public Response<Void> uploadParticipants(@RequestBody List<ParticipantUploadDTORequest> uploadDTORequests) {
+        // Same rows the service will touch (it skips entries without idNo or id).
+        uploadDTORequests.stream()
+                .flatMap(r -> r.getData() == null ? java.util.stream.Stream.empty() : r.getData().stream())
+                .filter(d -> d.getIdNo() != null && d.getId() != null)
+                .map(d -> d.getId())
+                .distinct()
+                .forEach(uuid -> eventAccessService.assertCanByParticipantUuid(uuid, Access.UPDATE));
         participantService.uploadParticipants(uploadDTORequests);
         return new Response<>(null, "Participants updated successfully", true);
     }
 
     @PostMapping("/sendBibByEvent")
     public Response<Void> sendBibDocumentByEvent(@Valid @RequestBody SendBibRequest request) {
+        eventAccessService.assertCanByEventUuid(request.getId(), Access.UPDATE);
         try {
             List<Map<String, Object>> participants = orderDetailRepository.findAllByEventUuid(request.getId());
 

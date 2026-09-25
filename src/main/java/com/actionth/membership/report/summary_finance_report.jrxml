@@ -43,21 +43,21 @@ FROM (
         0 AS sortGroup, q.eventTypeId AS sort1, q.pricingId AS sort2
  FROM (
                     SELECT od.id, et.id AS eventTypeId, od.pricingId, CONCAT(et.name, ' ', pt.name) AS name, pc.price AS unitPrice, 1 AS qty
-                    FROM action_membership.orders o
-                    JOIN action_membership.event e ON o.eventId = e.id
-                    JOIN action_membership.orderDetail od ON od.orderId = o.id
-                    JOIN action_membership.eventType et ON od.eventTypeId = et.id
-                    JOIN action_membership.pricing pc ON od.pricingId = pc.id
-                    JOIN action_membership.paymentType pt ON pc.paymentTypeId = pt.id
+                    FROM orders o
+                    JOIN event e ON o.eventId = e.id
+                    JOIN orderDetail od ON od.orderId = o.id
+                    JOIN eventType et ON od.eventTypeId = et.id
+                    JOIN pricing pc ON od.pricingId = pc.id
+                    JOIN paymentType pt ON pc.paymentTypeId = pt.id
                     WHERE e.uuid =  $P{id} 
                     AND o.createdTime BETWEEN $P{startDate} AND $P{endDate} 
                     AND o.paymentStatus = 'SUCCESS'
                     UNION
                     SELECT od.id, et.id AS eventTypeId, od.pricingId, et.name AS name, od.price AS unitPrice, 1 AS qty
-                    FROM action_membership.orders o
-                    JOIN action_membership.event e ON o.eventId = e.id
-                    JOIN action_membership.orderDetail od ON od.orderId = o.id AND od.pricingId IS NULL
-                    JOIN action_membership.eventType et ON od.eventTypeId = et.id
+                    FROM orders o
+                    JOIN event e ON o.eventId = e.id
+                    JOIN orderDetail od ON od.orderId = o.id AND od.pricingId IS NULL
+                    JOIN eventType et ON od.eventTypeId = et.id
                     WHERE e.uuid =  $P{id} 
                     AND o.createdTime BETWEEN $P{startDate} AND $P{endDate} 
                     AND o.paymentStatus = 'SUCCESS'
@@ -66,9 +66,9 @@ FROM (
  UNION ALL
  SELECT CONCAT('สินค้าเสริม: ', oa.name) AS name, oa.unitPrice, SUM(oa.qty) AS qty, SUM(oa.totalPrice) AS total,
         1 AS sortGroup, MIN(oa.id) AS sort1, NULL AS sort2
- FROM action_membership.orderAddOn oa
- JOIN action_membership.orders o ON oa.orderId = o.id
- JOIN action_membership.event e ON o.eventId = e.id
+ FROM orderAddOn oa
+ JOIN orders o ON oa.orderId = o.id
+ JOIN event e ON o.eventId = e.id
  WHERE e.uuid =  $P{id} 
  AND o.createdTime BETWEEN $P{startDate} AND $P{endDate} 
  AND o.paymentStatus = 'SUCCESS'
@@ -101,18 +101,19 @@ ORDER BY rpt.sortGroup, rpt.sort1, rpt.sort2]]>
 	<parameter name="endDate" class="java.lang.String"/>
 	<parameter name="remark" class="java.lang.String"/>
 	<queryString>
-		<![CDATA[SELECT e.uuid, e.name AS eventName, c.runNo AS contractNo, 
+		<![CDATA[SELECT e.uuid, e.name AS eventName,
+        (SELECT MAX(c.runNo) FROM contract c WHERE c.eventId = e.id) AS contractNo,
 		SUM(o.unitPrice) AS totalAmount,
         SUM(o.couponDiscount) AS totalDiscountCoupon, 
         SUM(o.discountShirt) AS totalDiscountShirt, 
         SUM(o.shippingFee) AS totalShippingFee,
         SUM(o.totalPrice) AS totalNetAmount
-FROM action_membership.orders o
-JOIN action_membership.event e ON o.eventId = e.id
-JOIN action_membership.contract c ON c.eventId = e.id
+FROM orders o
+JOIN event e ON o.eventId = e.id
 WHERE e.uuid =  $P{id} 
   AND o.createdTime BETWEEN  $P{startDate}  AND  $P{endDate} 
-  AND o.paymentStatus = 'SUCCESS']]>
+  AND o.paymentStatus = 'SUCCESS'
+GROUP BY e.id, e.uuid, e.name]]>
 	</queryString>
 	<field name="uuid" class="java.lang.String">
 		<property name="com.jaspersoft.studio.field.name" value="uuid"/>

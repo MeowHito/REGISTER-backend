@@ -282,9 +282,9 @@ public class SummaryReportServiceImpl implements SummaryReportService {
 
         Pageable pageable = PageRequest.of(pagingData.getPage(), pagingData.getSize(), sort);
 
+        // No query.distinct(true): every join here is many-to-one, so rows are already one per
+        // participant, and MySQL 8 rejects DISTINCT with an ORDER BY on the joined order columns.
         Specification<OrderDetail> spec = (root, query, cb) -> {
-            query.distinct(true);
-
             Join<OrderDetail, Orders> order = root.join("order", JoinType.LEFT);
             Join<OrderDetail, EventType> eventType = root.join("eventType", JoinType.LEFT);
             Join<Orders, Event> event = order.join("event", JoinType.LEFT);
@@ -386,9 +386,9 @@ public class SummaryReportServiceImpl implements SummaryReportService {
 
         Pageable pageable = PageRequest.of(pagingData.getPage(), pagingData.getSize(), sort);
 
+        // No query.distinct(true): every join here is many-to-one, so rows are already one per
+        // participant, and MySQL 8 rejects DISTINCT with an ORDER BY on the joined order columns.
         Specification<OrderDetail> spec = (root, query, cb) -> {
-            query.distinct(true);
-
             Join<OrderDetail, Orders> order = root.join("order", JoinType.LEFT);
             Join<OrderDetail, EventType> eventType = root.join("eventType", JoinType.LEFT);
             Join<Orders, Event> event = order.join("event", JoinType.LEFT);

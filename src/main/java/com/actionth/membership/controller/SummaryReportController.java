@@ -3,6 +3,7 @@ package com.actionth.membership.controller;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,6 +28,7 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/summaryReport")
+@PreAuthorize("hasRole('ADMIN')")
 public class SummaryReportController {
 
     private final SummaryReportService summaryReportService;

@@ -81,26 +81,26 @@ public class DataLoader implements CommandLineRunner {
 	public void run(String... args) {
 		if (menuRepository.count() == 0) {
 			List<Menu> menus = List.of(
-					Menu.builder().title("dashboard").path("/backoffice/dashboard").icon("DashboardOutlined")
+					Menu.builder().title("dashboard").path("/dashboard").icon("DashboardOutlined")
 							.isDisplay(true).isNoti(false).position(0).build(),
-					Menu.builder().title("historyList").path("/backoffice/historyList").icon("HistoryOutlined")
+					Menu.builder().title("historyList").path("/historyList").icon("HistoryOutlined")
 							.isDisplay(true).isNoti(false).position(1).build(),
-					Menu.builder().title("eventList").path("/backoffice/eventList").icon("CalendarOutlined")
+					Menu.builder().title("eventList").path("/eventList").icon("CalendarOutlined")
 							.isDisplay(true).isNoti(false).position(2).build(),
-					Menu.builder().title("couponList").path("/backoffice/couponList").icon("GiftOutlined")
+					Menu.builder().title("couponList").path("/couponList").icon("GiftOutlined")
 							.isDisplay(true).isNoti(false).position(3).build(),
-					Menu.builder().title("announcementList").path("/backoffice/announcementList").icon("SoundOutlined")
+					Menu.builder().title("announcementList").path("/announcementList").icon("SoundOutlined")
 							.isDisplay(true).isNoti(true).badgeKey("announcement").position(4).build(),
-					Menu.builder().title("eventCalendarList").path("/backoffice/eventCalendarList")
+					Menu.builder().title("eventCalendarList").path("/eventCalendarList")
 							.icon("NotificationOutlined").isDisplay(true).isNoti(true).badgeKey("eventCalendar")
 							.position(5).build(),
-					Menu.builder().title("contractList").path("/backoffice/contractList").icon("FileDoneOutlined")
+					Menu.builder().title("contractList").path("/contractList").icon("FileDoneOutlined")
 							.isDisplay(true).isNoti(false).position(6).build(),
-					Menu.builder().title("reportList").path("/backoffice/reportList").icon("BarChartOutlined")
+					Menu.builder().title("reportList").path("/reportList").icon("BarChartOutlined")
 							.isDisplay(true).isNoti(false).position(7).build(),
-					Menu.builder().title("setting").path("/backoffice/setting").icon("SettingOutlined").isDisplay(true)
+					Menu.builder().title("setting").path("/setting").icon("SettingOutlined").isDisplay(true)
 							.isNoti(false).position(8).build(),
-					Menu.builder().title("operations").path("/backoffice/operations").icon("ToolOutlined").isDisplay(true)
+					Menu.builder().title("operations").path("/operations").icon("ToolOutlined").isDisplay(true)
 							.isNoti(false).position(9).build());
 			menuRepository.saveAll(menus);
 		}
