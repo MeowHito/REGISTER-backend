@@ -112,4 +112,16 @@ public class OrderDetail extends StandardFields {
     @Convert(converter = SelectionAnswerConverter.class)
     @Column(columnDefinition = "json")
     private List<SelectionAnswerDto> selectionAnswers;
+
+    /**
+     * Set when an admin or organizer changes this runner by hand in the back office
+     * (not by the runner, not by the Excel upload); the participant list highlights such rows.
+     */
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+    private OffsetDateTime manualEditedTime;
+    private String manualEditedBy;
+
+    /** JSON list of {@code ParticipantEditLogDto}: every manual edit, oldest first. */
+    @Column(columnDefinition = "longtext")
+    private String manualEditLog;
 }

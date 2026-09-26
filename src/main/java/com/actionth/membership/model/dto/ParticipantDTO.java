@@ -33,6 +33,7 @@ public class ParticipantDTO {
     private String eventTypeId;
     private String eventTypeName;
     private String shirtSizeName;
+    private String shirtTypeName;
 
     private String orderNo;
 
@@ -44,6 +45,25 @@ public class ParticipantDTO {
     private String emergencyContact;
     private String emergencyRelation;
     private String emergencyPhone;
+
+    private String address;
+    private String amphoe;
+    private String district;
+    private String zipcode;
+
+    private String deliveryMethod;
+    private String shippingAddress;
+    private String shippingProvince;
+    private String shippingAmphoe;
+    private String shippingDistrict;
+    private String shippingZipcode;
+
+    /** Non-null once an admin/organizer edited this runner by hand; the list highlights the row. */
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+    private OffsetDateTime manualEditedTime;
+    private String manualEditedBy;
+    /** Full edit history, only on the single-participant endpoint. */
+    private List<ParticipantEditLogDto> manualEdits;
 
     private List<SelectionAnswerDto> selectionAnswers;
     private List<EventSelectionFieldDto> selectionFields;

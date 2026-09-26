@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.actionth.membership.exception.ParticipantOverQuotaException;
 import com.actionth.membership.service.EventAccessService;
 import com.actionth.membership.service.EventAccessService.Access;
 import com.actionth.membership.model.PagingData;
@@ -76,10 +77,15 @@ public class ParticipantController {
                 true);
     }
 
+    /** Responds {@code data = "OVER_QUOTA"} (not saved) when a distance move needs confirmOverQuota. */
     @PutMapping("/updateParticipant")
-    public Response<Void> updateParticipant(@Valid @RequestBody ParticipantDTORequest participantDTO) {
+    public Response<String> updateParticipant(@Valid @RequestBody ParticipantDTORequest participantDTO) {
         eventAccessService.assertCanByParticipantUuid(participantDTO.getId(), Access.UPDATE);
-        participantService.updateParticipant(participantDTO);
+        try {
+            participantService.updateParticipant(participantDTO);
+        } catch (ParticipantOverQuotaException e) {
+            return new Response<>("OVER_QUOTA", e.getMessage(), false);
+        }
         return new Response<>(null, "User updated successfully", true);
     }
 

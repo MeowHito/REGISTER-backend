@@ -1,5 +1,6 @@
 package com.actionth.membership.service.impl;
 
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -22,32 +23,46 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.actionth.membership.exception.BusinessException;
+import com.actionth.membership.exception.ParticipantOverQuotaException;
 import com.actionth.membership.exception.ResourceNotFoundException;
+import com.actionth.membership.model.EventType;
 import com.actionth.membership.model.EventSelectionField;
 import com.actionth.membership.model.OrderAddOn;
 import com.actionth.membership.model.OrderDetail;
 import com.actionth.membership.model.PagingData;
+import com.actionth.membership.model.Pricing;
 import com.actionth.membership.model.ShirtSize;
+import com.actionth.membership.model.ShirtType;
+import com.actionth.membership.model.User;
 import com.actionth.membership.model.dto.EventSelectionFieldDto;
 import com.actionth.membership.model.dto.EventSelectionOptionDto;
 import com.actionth.membership.model.dto.ParticipantDTO;
 import com.actionth.membership.model.dto.ParticipantDetailDto;
 import com.actionth.membership.model.dto.ParticipantDownloadDTO;
+import com.actionth.membership.model.dto.ParticipantEditLogDto;
 import com.actionth.membership.model.dto.ParticipantViewDto;
+import com.actionth.membership.model.dto.SelectionAnswerDto;
 import com.actionth.membership.model.dto.SelectionAnswerDto.SelectionValueDto;
 import com.actionth.membership.model.dto.ShirtSizeDto;
 import com.actionth.membership.model.request.ParticipantDTORequest;
 import com.actionth.membership.model.request.ParticipantUploadDTORequest;
 import com.actionth.membership.model.request.ParticipantUploadDTORequest.ParticipantUploadDTO;
 import com.actionth.membership.repository.EventPermissionRepository;
+import com.actionth.membership.repository.EventTypeRepository;
 import com.actionth.membership.repository.OrderDetailRepository;
 import com.actionth.membership.repository.ShirtSizeRepository;
+import com.actionth.membership.repository.ShirtTypeRepository;
 import com.actionth.membership.repository.UserRepository;
 import com.actionth.membership.service.EventTypeService;
 import com.actionth.membership.service.ParticipantService;
 import com.actionth.membership.utils.AddOnUtils;
 import com.actionth.membership.utils.AgeGroupUtils;
 import com.actionth.membership.utils.ContextUtils;
+import com.actionth.membership.utils.ExportDateTimeUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -61,6 +76,9 @@ public class ParticipantServiceImpl implements ParticipantService {
     private final EventPermissionRepository eventPermissionRepository;
     private final EventTypeService eventTypeService;
     private final ShirtSizeRepository shirtSizeRepository;
+    private final ShirtTypeRepository shirtTypeRepository;
+    private final EventTypeRepository eventTypeRepository;
+    private final ObjectMapper objectMapper;
     private final UserRepository userRepository;
     private final ContextUtils contextUtils;
     private final ModelMapper modelMapper;
@@ -386,6 +404,7 @@ public class ParticipantServiceImpl implements ParticipantService {
         }
         if (participant.getShirtType() != null) {
             dto.setShirtTypeId(participant.getShirtType().getUuid());
+            dto.setShirtTypeName(participant.getShirtType().getName());
         }
 
         if (participant.getEventType() != null) {
@@ -400,11 +419,23 @@ public class ParticipantServiceImpl implements ParticipantService {
         dto.setEmail(participant.getEmail());
         dto.setPhone(participant.getPhone());
         dto.setProvince(participant.getProvince());
+        dto.setAddress(participant.getAddress());
+        dto.setAmphoe(participant.getAmphoe());
+        dto.setDistrict(participant.getDistrict());
+        dto.setZipcode(participant.getZipcode());
+        dto.setDeliveryMethod(participant.getDeliveryMethod());
+        dto.setShippingAddress(participant.getShippingAddress());
+        dto.setShippingProvince(participant.getShippingProvince());
+        dto.setShippingAmphoe(participant.getShippingAmphoe());
+        dto.setShippingDistrict(participant.getShippingDistrict());
+        dto.setShippingZipcode(participant.getShippingZipcode());
         dto.setBloodType(participant.getBloodType());
         dto.setHealthIssues(participant.getHealthIssues());
         dto.setEmergencyContact(participant.getEmergencyContact());
         dto.setEmergencyRelation(participant.getEmergencyRelation());
         dto.setEmergencyPhone(participant.getEmergencyPhone());
+        dto.setManualEditedTime(participant.getManualEditedTime());
+        dto.setManualEditedBy(participant.getManualEditedBy());
         dto.setAddOns(AddOnUtils.forParticipant(participant).stream()
                 .map(AddOnUtils::toDto)
                 .toList());
@@ -418,6 +449,7 @@ public class ParticipantServiceImpl implements ParticipantService {
         OrderDetail participant = orderDetailRepository.findByUuid(uuid)
                 .orElseThrow(() -> new ResourceNotFoundException("Participant not found"));
         ParticipantDTO dto = toDTO(participant);
+        dto.setManualEdits(readEditLog(participant.getManualEditLog()));
 
         // Populate selectionAnswers and combined selectionFields for the detail view
         dto.setSelectionAnswers(participant.getSelectionAnswers());
@@ -650,41 +682,243 @@ public class ParticipantServiceImpl implements ParticipantService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void updateParticipant(ParticipantDTORequest participantDTO) {
+    public void updateParticipant(ParticipantDTORequest req) {
 
-        OrderDetail participant = orderDetailRepository.findByUuid(participantDTO.getId())
+        OrderDetail participant = orderDetailRepository.findByUuid(req.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Participant not found"));
+        Integer eventId = participant.getOrder() != null && participant.getOrder().getEvent() != null
+                ? participant.getOrder().getEvent().getId()
+                : null;
 
-        participant.setBibNo(participantDTO.getBibNo());
-        participant.setTeamClub(participantDTO.getTeamClub());
-        participant.setFirstName(participantDTO.getFirstName());
-        participant.setLastName(participantDTO.getLastName());
-        participant.setFirstNameEn(participantDTO.getFirstNameEn());
-        participant.setLastNameEn(participantDTO.getLastNameEn());
-        participant.setIdNo(participantDTO.getIdNo());
-        participant.setGender(participantDTO.getGender());
-        participant.setBirthDate(participantDTO.getBirthDate());
-        participant.setNationality(participantDTO.getNationality());
-        participant.setEmail(participantDTO.getEmail());
-        participant.setPhone(participantDTO.getPhone());
-        participant.setProvince(participantDTO.getProvince());
-        participant.setBloodType(participantDTO.getBloodType());
-        participant.setHealthIssues(participantDTO.getHealthIssues());
-        participant.setEmergencyContact(participantDTO.getEmergencyContact());
-        participant.setEmergencyRelation(participantDTO.getEmergencyRelation());
-        participant.setEmergencyPhone(participantDTO.getEmergencyPhone());
+        List<ParticipantEditLogDto.Change> changes = new ArrayList<>();
 
-        if (participantDTO.getSelectionAnswers() != null) {
-            participant.setSelectionAnswers(participantDTO.getSelectionAnswers());
+        // Distance: must belong to the same event. A full quota only warns — the caller resends
+        // with confirmOverQuota once the user accepts. The paid price snapshot stays as it is.
+        if (!isBlank(req.getEventTypeId()) && (participant.getEventType() == null
+                || !req.getEventTypeId().equals(participant.getEventType().getUuid()))) {
+            EventType target = eventTypeRepository.findByUuid(req.getEventTypeId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Event type not found"));
+            if (target.getEvent() == null || !Objects.equals(target.getEvent().getId(), eventId)) {
+                throw new BusinessException("ประเภทการแข่งขันที่เลือกไม่ได้อยู่ในอีเวนต์นี้");
+            }
+            Pricing targetPricing = matchingPricing(participant.getPricing(), target);
+            if (!Boolean.TRUE.equals(req.getConfirmOverQuota())) {
+                String full = overQuotaMessage(target, targetPricing);
+                if (full != null) {
+                    throw new ParticipantOverQuotaException(full);
+                }
+            }
+            track(changes, "eventType",
+                    participant.getEventType() != null ? participant.getEventType().getName() : null, target.getName());
+            participant.setEventType(target);
+            participant.setPricing(targetPricing);
         }
 
-        Optional<ShirtSize> shirtSize = shirtSizeRepository.findByUuid(participantDTO.getShirtSizeId());
+        // Shirt: the type must be one of this event's, the size one of that type's.
+        ShirtType shirtType = participant.getShirtType();
+        if (!isBlank(req.getShirtTypeId()) && (shirtType == null || !req.getShirtTypeId().equals(shirtType.getUuid()))) {
+            ShirtType target = shirtTypeRepository.findByUuid(req.getShirtTypeId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Shirt type not found"));
+            if (target.getEvent() == null || !Objects.equals(target.getEvent().getId(), eventId)) {
+                throw new BusinessException("แบบเสื้อที่เลือกไม่ได้อยู่ในอีเวนต์นี้");
+            }
+            track(changes, "shirtType", shirtType != null ? shirtType.getName() : null, target.getName());
+            participant.setShirtType(target);
+            shirtType = target;
+        }
+        if (!isBlank(req.getShirtSizeId())) {
+            Optional<ShirtSize> shirtSize = shirtSizeRepository.findByUuid(req.getShirtSizeId());
+            if (shirtSize.isPresent()) {
+                ShirtSize size = shirtSize.get();
+                if (shirtType != null && size.getShirtType() != null
+                        && !Objects.equals(size.getShirtType().getId(), shirtType.getId())) {
+                    throw new BusinessException("ไซส์เสื้อที่เลือกไม่ตรงกับแบบเสื้อ");
+                }
+                ShirtSize old = participant.getShirtSize();
+                if (old == null || !Objects.equals(old.getId(), size.getId())) {
+                    track(changes, "shirtSize", old != null ? old.getName() : null, size.getName());
+                    participant.setShirtSize(size);
+                }
+            }
+        }
 
-        if (shirtSize.isPresent()) {
-            participant.setShirtSize(shirtSize.get());
+        track(changes, "bibNo", participant.getBibNo(), req.getBibNo());
+        participant.setBibNo(req.getBibNo());
+        track(changes, "teamClub", participant.getTeamClub(), req.getTeamClub());
+        participant.setTeamClub(req.getTeamClub());
+        track(changes, "firstName", participant.getFirstName(), req.getFirstName());
+        participant.setFirstName(req.getFirstName());
+        track(changes, "lastName", participant.getLastName(), req.getLastName());
+        participant.setLastName(req.getLastName());
+        track(changes, "firstNameEn", participant.getFirstNameEn(), req.getFirstNameEn());
+        participant.setFirstNameEn(req.getFirstNameEn());
+        track(changes, "lastNameEn", participant.getLastNameEn(), req.getLastNameEn());
+        participant.setLastNameEn(req.getLastNameEn());
+        track(changes, "idNo", participant.getIdNo(), req.getIdNo());
+        participant.setIdNo(req.getIdNo());
+        track(changes, "gender", participant.getGender(), req.getGender());
+        participant.setGender(req.getGender());
+
+        // Compare the calendar day in Thai time: the form sends local midnight as UTC (…T17:00Z).
+        String oldBirth = participant.getBirthDate() != null
+                ? participant.getBirthDate().atZoneSameInstant(ExportDateTimeUtils.BANGKOK_ZONE).toLocalDate().toString()
+                : null;
+        String newBirth = req.getBirthDate() != null
+                ? req.getBirthDate().atZoneSameInstant(ExportDateTimeUtils.BANGKOK_ZONE).toLocalDate().toString()
+                : null;
+        if (!Objects.equals(oldBirth, newBirth)) {
+            track(changes, "birthDate", oldBirth, newBirth);
+            participant.setBirthDate(req.getBirthDate());
+            // Same rule as at registration: age in the year the runner signed up.
+            participant.setAge(req.getBirthDate() == null ? null
+                    : AgeGroupUtils.calculateAgeAtRefDate(req.getBirthDate(), participant.getCreatedTime()));
+        }
+
+        track(changes, "nationality", participant.getNationality(), req.getNationality());
+        participant.setNationality(req.getNationality());
+        track(changes, "email", participant.getEmail(), req.getEmail());
+        participant.setEmail(req.getEmail());
+        track(changes, "phone", participant.getPhone(), req.getPhone());
+        participant.setPhone(req.getPhone());
+        track(changes, "address", participant.getAddress(), req.getAddress());
+        participant.setAddress(req.getAddress());
+        track(changes, "province", participant.getProvince(), req.getProvince());
+        participant.setProvince(req.getProvince());
+        track(changes, "amphoe", participant.getAmphoe(), req.getAmphoe());
+        participant.setAmphoe(req.getAmphoe());
+        track(changes, "district", participant.getDistrict(), req.getDistrict());
+        participant.setDistrict(req.getDistrict());
+        track(changes, "zipcode", participant.getZipcode(), req.getZipcode());
+        participant.setZipcode(req.getZipcode());
+        track(changes, "shippingAddress", participant.getShippingAddress(), req.getShippingAddress());
+        participant.setShippingAddress(req.getShippingAddress());
+        track(changes, "shippingProvince", participant.getShippingProvince(), req.getShippingProvince());
+        participant.setShippingProvince(req.getShippingProvince());
+        track(changes, "shippingAmphoe", participant.getShippingAmphoe(), req.getShippingAmphoe());
+        participant.setShippingAmphoe(req.getShippingAmphoe());
+        track(changes, "shippingDistrict", participant.getShippingDistrict(), req.getShippingDistrict());
+        participant.setShippingDistrict(req.getShippingDistrict());
+        track(changes, "shippingZipcode", participant.getShippingZipcode(), req.getShippingZipcode());
+        participant.setShippingZipcode(req.getShippingZipcode());
+        track(changes, "bloodType", participant.getBloodType(), req.getBloodType());
+        participant.setBloodType(req.getBloodType());
+        track(changes, "healthIssues", participant.getHealthIssues(), req.getHealthIssues());
+        participant.setHealthIssues(req.getHealthIssues());
+        track(changes, "emergencyContact", participant.getEmergencyContact(), req.getEmergencyContact());
+        participant.setEmergencyContact(req.getEmergencyContact());
+        track(changes, "emergencyRelation", participant.getEmergencyRelation(), req.getEmergencyRelation());
+        participant.setEmergencyRelation(req.getEmergencyRelation());
+        track(changes, "emergencyPhone", participant.getEmergencyPhone(), req.getEmergencyPhone());
+        participant.setEmergencyPhone(req.getEmergencyPhone());
+
+        if (req.getSelectionAnswers() != null) {
+            String before = answersText(participant.getSelectionAnswers());
+            String after = answersText(req.getSelectionAnswers());
+            track(changes, "selectionAnswers", before, after);
+            participant.setSelectionAnswers(req.getSelectionAnswers());
+        }
+
+        if (!changes.isEmpty()) {
+            recordManualEdit(participant, changes);
         }
 
         orderDetailRepository.save(participant);
+    }
+
+    /** The target distance's pricing for the same phase (Early Bird → Early Bird), else none. */
+    private Pricing matchingPricing(Pricing current, EventType target) {
+        if (current == null || current.getPaymentType() == null || target.getPricing() == null) {
+            return null;
+        }
+        Integer phaseId = current.getPaymentType().getId();
+        return target.getPricing().stream()
+                .filter(p -> p.getPaymentType() != null && Objects.equals(p.getPaymentType().getId(), phaseId))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /** Thai warning when one more runner would exceed the distance or its pricing phase, else null. */
+    private String overQuotaMessage(EventType target, Pricing pricing) {
+        if (target.getQuota() != null) {
+            long used = orderDetailRepository.countRegisteredByEventTypeId(target.getId());
+            if (used >= target.getQuota()) {
+                return String.format("ประเภท %s โควตาเต็มแล้ว (%d/%d)", target.getName(), used, target.getQuota());
+            }
+        }
+        if (pricing != null && pricing.getQuota() != null) {
+            long used = orderDetailRepository.countByPricingIdAndActiveOrder(pricing.getId());
+            if (used >= pricing.getQuota()) {
+                String phase = pricing.getPaymentType() != null ? pricing.getPaymentType().getName() : "";
+                return String.format("ประเภท %s รอบ %s โควตาเต็มแล้ว (%d/%d)", target.getName(), phase, used,
+                        pricing.getQuota());
+            }
+        }
+        return null;
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
+    }
+
+    /** Records a change when the value really differs; blank and null count as the same. */
+    private static void track(List<ParticipantEditLogDto.Change> changes, String field, String before, String after) {
+        String b = trimToNull(before);
+        String a = trimToNull(after);
+        if (!Objects.equals(b, a)) {
+            changes.add(new ParticipantEditLogDto.Change(field, b, a));
+        }
+    }
+
+    private String answersText(List<SelectionAnswerDto> answers) {
+        if (answers == null) {
+            return null;
+        }
+        return answers.stream()
+                .map(a -> Objects.toString(a.getQuestion() != null ? a.getQuestion().getValue() : null, "")
+                        + ": " + extractAnswerValue(a.getValue()))
+                .collect(Collectors.joining("; "));
+    }
+
+    private void recordManualEdit(OrderDetail participant, List<ParticipantEditLogDto.Change> changes) {
+        OffsetDateTime now = OffsetDateTime.now();
+        String by = currentEditorName();
+
+        List<ParticipantEditLogDto> history = readEditLog(participant.getManualEditLog());
+        history.add(new ParticipantEditLogDto(now, by, changes));
+        try {
+            participant.setManualEditLog(objectMapper.writeValueAsString(history));
+        } catch (JsonProcessingException e) {
+            throw new BusinessException("บันทึกประวัติการแก้ไขไม่สำเร็จ", e);
+        }
+        participant.setManualEditedTime(now);
+        participant.setManualEditedBy(by);
+    }
+
+    private String currentEditorName() {
+        Integer userId = contextUtils.getCurrentUserIdOrNull();
+        User user = userId != null ? userRepository.findById(userId).orElse(null) : null;
+        if (user == null) {
+            return "-";
+        }
+        String name = (Objects.toString(user.getFirstName(), "") + " " + Objects.toString(user.getLastName(), "")).trim();
+        if (name.isEmpty()) {
+            name = Objects.toString(user.getEmail(), "-");
+        }
+        String role = user.getRole() != null ? user.getRole().getRole() : null;
+        return role != null && !role.isBlank() ? name + " (" + role + ")" : name;
+    }
+
+    private List<ParticipantEditLogDto> readEditLog(String json) {
+        if (json == null || json.isBlank()) {
+            return new ArrayList<>();
+        }
+        try {
+            return new ArrayList<>(objectMapper.readValue(json, new TypeReference<List<ParticipantEditLogDto>>() {
+            }));
+        } catch (JsonProcessingException e) {
+            log.warn("Unreadable manualEditLog, starting over: {}", e.getMessage());
+            return new ArrayList<>();
+        }
     }
 
     @Override

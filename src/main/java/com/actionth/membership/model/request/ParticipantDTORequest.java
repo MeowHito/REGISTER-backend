@@ -20,6 +20,7 @@ public class ParticipantDTORequest {
     private String id;    
     private String bibNo;
     private String teamClub;
+    private String shirtTypeId;
     private String shirtSizeId;
 
     private String firstName;
@@ -52,5 +53,19 @@ public class ParticipantDTORequest {
 
     private String emergencyPhone;
 
+    private String address;
+    private String amphoe;
+    private String district;
+    private String zipcode;
+
+    private String shippingAddress;
+    private String shippingProvince;
+    private String shippingAmphoe;
+    private String shippingDistrict;
+    private String shippingZipcode;
+
     private List<SelectionAnswerDto> selectionAnswers;
+
+    /** Move to a distance whose quota is already full anyway (the user was warned first). */
+    private Boolean confirmOverQuota;
 }
