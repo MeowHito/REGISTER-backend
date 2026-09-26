@@ -39,12 +39,17 @@ public class ParticipantDTO {
 
     private String email;
     private String phone;
+    private String phoneCountryCode;
     private String province;
     private String bloodType;
     private String healthIssues;
     private String emergencyContact;
     private String emergencyRelation;
     private String emergencyPhone;
+    private String emergencyPhoneCountryCode;
+    private Integer teamGroup;
+    /** Every garment: the race shirt first, then finisher / special ones. */
+    private List<OrderDetailShirtDto> shirts;
 
     private String address;
     private String amphoe;

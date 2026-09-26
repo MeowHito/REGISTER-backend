@@ -8,6 +8,7 @@ import javax.validation.constraints.Pattern;
 
 import org.springframework.format.annotation.DateTimeFormat;
 
+import com.actionth.membership.model.dto.OrderDetailShirtDto;
 import com.actionth.membership.model.dto.SelectionAnswerDto;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
@@ -41,6 +42,7 @@ public class ParticipantDTORequest {
     private String email;
 
     private String phone;
+    private String phoneCountryCode;
 
     private String province;
 
@@ -52,6 +54,10 @@ public class ParticipantDTORequest {
     private String emergencyRelation;
 
     private String emergencyPhone;
+    private String emergencyPhoneCountryCode;
+
+    /** Extra (finisher / special) shirts; the race shirt is shirtTypeId/shirtSizeId. Null = leave as is. */
+    private List<OrderDetailShirtDto> shirts;
 
     private String address;
     private String amphoe;

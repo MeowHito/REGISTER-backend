@@ -1,6 +1,11 @@
 package com.actionth.membership.model;
 
 import lombok.AllArgsConstructor;
+import org.hibernate.annotations.LazyCollection;
+import org.hibernate.annotations.LazyCollectionOption;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
+import java.util.ArrayList;
+import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
@@ -70,6 +75,9 @@ public class OrderDetail extends StandardFields {
     private Integer age;
     private String email;
     private String phone;
+    /** Dialling code of {@link #phone}, e.g. "+66"; null means Thailand for rows from before it existed. */
+    @Column(length = 8)
+    private String phoneCountryCode;
     private String nationality;
     private String idNo;
     private String healthIssues;
@@ -78,8 +86,24 @@ public class OrderDetail extends StandardFields {
     private String emergencyContact;
     private String emergencyRelation;
     private String emergencyPhone;
+    @Column(length = 8)
+    private String emergencyPhoneCountryCode;
 
     private String teamClub;
+
+    /**
+     * Groups the members of one team inside an order (1, 2, ...) for team distances; null for
+     * individual registrations.
+     */
+    private Integer teamGroup;
+
+    /** Finisher / special shirts picked besides the race shirt. */
+    @OneToMany(mappedBy = "orderDetail", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @LazyCollection(LazyCollectionOption.FALSE)
+    @JsonManagedReference("orderDetail-shirts")
+    @Builder.Default
+    @ToString.Exclude
+    private List<OrderDetailShirt> shirts = new ArrayList<>();
 
     private String deliveryMethod;
 

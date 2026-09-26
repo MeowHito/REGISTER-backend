@@ -71,13 +71,25 @@ public class NotificationService {
                 type, title, message, link));
     }
 
-    /** Organizer sign-up waiting for approval. */
+    /**
+     * Organizer sign-up waiting for approval: goes to the admins who may approve; when nobody
+     * holds that right yet, every admin is told so the sign-up is not lost.
+     */
     public void organizerPending(User organizer) {
         String name = (Objects.toString(organizer.getFirstName(), "") + " "
                 + Objects.toString(organizer.getLastName(), "")).trim();
-        notifyAdmins(NotificationType.ORGANIZER_PENDING, "มีผู้จัดงานสมัครใหม่รออนุมัติ",
-                (name.isEmpty() ? "" : name + " · ") + Objects.toString(organizer.getEmail(), ""),
-                "/operations?tab=pendingOrganizers");
+        String title = "มีผู้จัดงานสมัครใหม่รออนุมัติ";
+        String message = (name.isEmpty() ? "" : name + " · ") + Objects.toString(organizer.getEmail(), "");
+        String link = "/operations?tab=pendingOrganizers";
+        Set<Integer> approvers = userRepository.findOrganizerApprovers().stream()
+                .map(User::getId)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        if (approvers.isEmpty()) {
+            notifyAdmins(NotificationType.ORGANIZER_PENDING, title, message, link);
+            return;
+        }
+        publisher.publishEvent(new NotificationEvent(approvers, false, contextUtils.getCurrentUserIdOrNull(),
+                NotificationType.ORGANIZER_PENDING, title, message, link));
     }
 
     // ---------------------------------------------------------------- deliver

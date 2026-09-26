@@ -61,6 +61,9 @@ public interface UserService {
 
     void updateStatus(UserProfileDTORequest user);
 
+    /** Admin-only: grant or revoke the right to approve organizer sign-ups (admins only). */
+    void updateApprover(String uuid, boolean canApprove);
+
     void updateRole(UseRoleDtoRequest user);
 
     User getCurrentUserSession();

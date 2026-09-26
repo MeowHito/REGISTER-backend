@@ -236,6 +236,7 @@ public class OrderHistoryService {
                     : null);
             dto.setShirtSizeName(detail.getShirtSize() != null ? detail.getShirtSize().getName() : null);
             dto.setShirtTypeName(detail.getShirtType() != null ? detail.getShirtType().getName() : null);
+            dto.setExtraShirts(com.actionth.membership.utils.ShirtUtils.extraShirts(detail));
             dto.setEventTypeName(detail.getEventType() != null ? detail.getEventType().getName() : null);
             dto.setAgeGroupName(AgeGroupUtils.resolveAgeGroupCode(detail));
             dto.setBibNo(detail.getBibNo());

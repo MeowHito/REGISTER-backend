@@ -36,4 +36,6 @@ public class EventCalendarImportResult {
     private int failed;
     /** Short error text when the run aborted (null on success). */
     private String error;
+    /** An admin stopped the run early; what was imported so far is kept. */
+    private boolean stopped;
 }

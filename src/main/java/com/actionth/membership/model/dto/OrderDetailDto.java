@@ -24,6 +24,7 @@ public class OrderDetailDto {
     private OffsetDateTime birthDate;
     private String email;
     private String phone;
+    private String phoneCountryCode;
     private String nationality;
     private String idNo;
     private String healthIssues;
@@ -32,8 +33,11 @@ public class OrderDetailDto {
     private String emergencyContact;
     private String emergencyRelation;
     private String emergencyPhone;
+    private String emergencyPhoneCountryCode;
 
     private String teamClub;
+    private Integer teamGroup;
+    private List<OrderDetailShirtDto> shirts;
 
     private String deliveryMethod;
 

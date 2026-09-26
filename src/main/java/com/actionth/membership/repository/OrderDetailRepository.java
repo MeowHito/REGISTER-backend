@@ -71,6 +71,18 @@ public interface OrderDetailRepository
 			""")
 	boolean existsByShirtTypeIdAndActiveOrder(@Param("shirtTypeId") Integer shirtTypeId);
 
+	/** Rows: [shirtSize uuid, count] over the race shirts of every committed order of the event. */
+	@Query("""
+			SELECT od.shirtSize.uuid, COUNT(od)
+			FROM OrderDetail od
+			JOIN od.order o
+			WHERE o.event.id = :eventId
+			  AND od.shirtSize IS NOT NULL
+			  AND o.paymentStatus IN ('SUCCESS', 'PENDING', 'REVIEW')
+			GROUP BY od.shirtSize.uuid
+			""")
+	List<Object[]> countBySizeForEvent(@Param("eventId") Integer eventId);
+
 	@Query("""
 			SELECT COUNT(od) > 0
 			FROM OrderDetail od
@@ -179,6 +191,9 @@ public interface OrderDetailRepository
 			     OR od.lastName = :name
 			     OR od.idNo = :name
 			     OR od.bibNo = :name
+			     OR od.phone = :name
+			     OR o.orderNo = :name
+			     OR od.teamClub = :name
 			  )
 			  AND o.paymentStatus = 'SUCCESS'
 			""", nativeQuery = true)
@@ -205,6 +220,9 @@ public interface OrderDetailRepository
 			     OR od.idNo = :exact
 			     OR od.bibNo = :exact
 			     OR od.uuid = :exact
+			     OR od.phone LIKE CONCAT('%', :q, '%')
+			     OR LOWER(o.orderNo) LIKE LOWER(CONCAT('%', :q, '%'))
+			     OR LOWER(od.teamClub) LIKE LOWER(CONCAT('%', :q, '%'))
 			)
 			""")
 	Page<OrderDetail> searchParticipants(
@@ -234,6 +252,9 @@ public interface OrderDetailRepository
 			     OR od.idNo = :exact
 			     OR od.bibNo = :exact
 			     OR od.uuid = :exact
+			     OR od.phone LIKE CONCAT('%', :full, '%')
+			     OR LOWER(o.orderNo) LIKE LOWER(CONCAT('%', :full, '%'))
+			     OR LOWER(od.teamClub) LIKE LOWER(CONCAT('%', :full, '%'))
 			  )
 			""")
 	Page<OrderDetail> searchParticipantsFullName(

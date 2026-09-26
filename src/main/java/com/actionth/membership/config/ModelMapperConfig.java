@@ -9,6 +9,7 @@ import com.actionth.membership.model.CountryState;
 import com.actionth.membership.model.Coupon;
 import com.actionth.membership.model.Event;
 import com.actionth.membership.model.OrderDetail;
+import com.actionth.membership.utils.ShirtUtils;
 import com.actionth.membership.model.Orders;
 import com.actionth.membership.model.dto.CountryStateDto;
 import com.actionth.membership.model.dto.EventViewDto;
@@ -56,6 +57,7 @@ public class ModelMapperConfig {
                 skip().setShirtSize(null);
                 skip().setPricing(null);
                 skip().setOrder(null);
+                skip().setShirts(null);
             }
         });
 
@@ -115,6 +117,9 @@ public class ModelMapperConfig {
                     OrderDetail od = (OrderDetail) ctx.getSource();
                     return od.getPricing() != null ? od.getPricing().getUuid() : null;
                 }).map(source).setPricingId(null);
+
+                using(ctx -> ShirtUtils.allShirts((OrderDetail) ctx.getSource()))
+                        .map(source).setShirts(null);
             }
         });
 

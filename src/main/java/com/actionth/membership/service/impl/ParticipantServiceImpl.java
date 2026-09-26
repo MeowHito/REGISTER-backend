@@ -57,6 +57,9 @@ import com.actionth.membership.repository.UserRepository;
 import com.actionth.membership.service.EventTypeService;
 import com.actionth.membership.service.ParticipantService;
 import com.actionth.membership.utils.AddOnUtils;
+import com.actionth.membership.utils.ShirtUtils;
+import com.actionth.membership.model.OrderDetailShirt;
+import com.actionth.membership.model.dto.OrderDetailShirtDto;
 import com.actionth.membership.utils.AgeGroupUtils;
 import com.actionth.membership.utils.ContextUtils;
 import com.actionth.membership.utils.ExportDateTimeUtils;
@@ -137,6 +140,8 @@ public class ParticipantServiceImpl implements ParticipantService {
                 case "orderNo" -> cb.like(cb.lower(root.get("order").get("orderNo")), text);
                 case "bibNo" -> cb.like(cb.lower(root.get("bibNo")), text);
                 case "teamClub" -> cb.like(cb.lower(root.get("teamClub")), text);
+                case "phone" -> cb.like(root.get("phone"), text);
+                case "email" -> cb.like(cb.lower(root.get("email")), text);
                 case "shirtSizeName" -> cb.like(cb.lower(root.get("shirtSize").get("name")), text);
                 default -> cb.conjunction();
             });
@@ -270,6 +275,7 @@ public class ParticipantServiceImpl implements ParticipantService {
         // Contact (masked for public view, unmasked for authorized users)
         dto.setEmail(canViewFull ? od.getEmail() : maskEmail(od.getEmail()));
         dto.setPhone(canViewFull ? od.getPhone() : maskPhone(od.getPhone()));
+        dto.setPhoneCountryCode(od.getPhoneCountryCode());
         dto.setAddress(od.getAddress());
         dto.setProvince(od.getProvince());
         dto.setAmphoe(od.getAmphoe());
@@ -282,6 +288,7 @@ public class ParticipantServiceImpl implements ParticipantService {
         dto.setEmergencyContact(od.getEmergencyContact());
         dto.setEmergencyRelation(od.getEmergencyRelation());
         dto.setEmergencyPhone(canViewFull ? od.getEmergencyPhone() : maskPhone(od.getEmergencyPhone()));
+        dto.setEmergencyPhoneCountryCode(od.getEmergencyPhoneCountryCode());
 
         // Event
         dto.setEventTypeName(od.getEventType() != null ? od.getEventType().getName() : null);
@@ -292,6 +299,8 @@ public class ParticipantServiceImpl implements ParticipantService {
         dto.setReceiveShirt(od.getReceiveShirt());
         dto.setShirtTypeName(od.getShirtType() != null ? od.getShirtType().getName() : null);
         dto.setShirtSizeName(od.getShirtSize() != null ? od.getShirtSize().getName() : null);
+        dto.setExtraShirts(ShirtUtils.extraShirts(od));
+        dto.setTeamGroup(od.getTeamGroup());
         dto.setDeliveryMethod(od.getDeliveryMethod());
         dto.setShippingAddress(od.getShippingAddress());
         dto.setShippingProvince(od.getShippingProvince());
@@ -418,6 +427,10 @@ public class ParticipantServiceImpl implements ParticipantService {
 
         dto.setEmail(participant.getEmail());
         dto.setPhone(participant.getPhone());
+        dto.setPhoneCountryCode(participant.getPhoneCountryCode());
+        dto.setEmergencyPhoneCountryCode(participant.getEmergencyPhoneCountryCode());
+        dto.setTeamGroup(participant.getTeamGroup());
+        dto.setShirts(ShirtUtils.allShirts(participant));
         dto.setProvince(participant.getProvince());
         dto.setAddress(participant.getAddress());
         dto.setAmphoe(participant.getAmphoe());
@@ -473,9 +486,10 @@ public class ParticipantServiceImpl implements ParticipantService {
     public List<Map<String, Object>> getAllParticipantDownload(Integer eventId) {
         String[] baseColumns = { "id", "หมายเลขออเดอร์", "ชื่อ", "นามสกุล", "ชื่อ (ภาษาอังกฤษ)", "นามสกุล (ภาษาอังกฤษ)",
                 "บัตรประชาชน", "เพศ", "วันเกิด", "สัญชาติ",
-                "อีเมล", "เบอร์โทรศัพท์", "ที่อยู่", "จังหวัด", "อำเภอ", "ตำบล", "ไปรษณีย์",
-                "หมู่เลือด", "ปัญหาสุขภาพ", "ผู้ติดต่อฉุกเฉิน", "เบอร์โทรศัพท์ผู้ติดต่อฉุกเฉิน",
-                "ไซส์เสื้อ", "กลุ่มอายุ", "สมัครวันที่", "ชื่อทีม", "bib", "ข้อตกลงการรับสมัครและกติกา",
+                "อีเมล", "รหัสประเทศ", "เบอร์โทรศัพท์", "ที่อยู่", "จังหวัด", "อำเภอ", "ตำบล", "ไปรษณีย์",
+                "หมู่เลือด", "ปัญหาสุขภาพ", "ผู้ติดต่อฉุกเฉิน", "รหัสประเทศ (ฉุกเฉิน)", "เบอร์โทรศัพท์ผู้ติดต่อฉุกเฉิน",
+                "แบบเสื้อ", "ไซส์เสื้อ", "เสื้อ Finisher", "เสื้อพิเศษ", "กลุ่มอายุ", "สมัครวันที่", "ชื่อทีม", "ทีมที่",
+                "bib", "ข้อตกลงการรับสมัครและกติกา",
                 "รับเสื้อและอุปกรณ์", "ที่อยู่จัดส่ง", "รับ Bib และอุปกรณ์แข่งขัน", "ผู้มารับ", "เบอร์ติดต่อ",
                 "ผู้รับแทน" };
 
@@ -553,6 +567,7 @@ public class ParticipantServiceImpl implements ParticipantService {
                 row.add(dto.getBirthDate() != null ? dto.getBirthDate().toString() : "");
                 row.add(dto.getNationality());
                 row.add(dto.getEmail());
+                row.add(Objects.toString(participant.getPhoneCountryCode(), ""));
                 row.add(dto.getPhone());
                 row.add(dto.getAddress());
                 row.add(dto.getProvince());
@@ -562,11 +577,16 @@ public class ParticipantServiceImpl implements ParticipantService {
                 row.add(dto.getBloodType());
                 row.add(dto.getHealthIssues());
                 row.add(dto.getEmergencyContact());
+                row.add(Objects.toString(participant.getEmergencyPhoneCountryCode(), ""));
                 row.add(dto.getEmergencyPhone());
+                row.add(participant.getShirtType() != null ? participant.getShirtType().getName() : "");
                 row.add(dto.getShirtSize() != null ? dto.getShirtSize().getName() : "");
+                row.add(extraShirtCell(participant, "FINISHER"));
+                row.add(extraShirtCell(participant, "SPECIAL"));
                 row.add(AgeGroupUtils.resolveAgeGroup(participant));
                 row.add(dto.getRegisterDate() != null ? dto.getRegisterDate().toString() : "");
                 row.add(dto.getTeamClub());
+                row.add(participant.getTeamGroup() != null ? String.valueOf(participant.getTeamGroup()) : "");
                 row.add(dto.getBibNo());
                 row.add(Boolean.TRUE.equals(dto.getRules()) ? "ยอมรับ" : "ไม่ยอมรับ");
                 row.add(dto.getDeliveryMethod());
@@ -606,6 +626,14 @@ public class ParticipantServiceImpl implements ParticipantService {
             formatData.add(allParticipant);
         }
         return formatData;
+    }
+
+    /** "แบบ / ไซส์" of the runner's shirt in that category, or blank. */
+    private static String extraShirtCell(OrderDetail participant, String category) {
+        return ShirtUtils.extraShirts(participant).stream()
+                .filter(sh -> category.equalsIgnoreCase(sh.getCategory()))
+                .map(sh -> Objects.toString(sh.getShirtTypeName(), "-") + " / " + Objects.toString(sh.getShirtSizeName(), "-"))
+                .collect(Collectors.joining(", "));
     }
 
     /** Groups by the organizer's add-on; falls back to the snapshotted name if it was deleted. */
@@ -780,6 +808,8 @@ public class ParticipantServiceImpl implements ParticipantService {
         participant.setEmail(req.getEmail());
         track(changes, "phone", participant.getPhone(), req.getPhone());
         participant.setPhone(req.getPhone());
+        track(changes, "phoneCountryCode", participant.getPhoneCountryCode(), req.getPhoneCountryCode());
+        participant.setPhoneCountryCode(req.getPhoneCountryCode());
         track(changes, "address", participant.getAddress(), req.getAddress());
         participant.setAddress(req.getAddress());
         track(changes, "province", participant.getProvince(), req.getProvince());
@@ -810,6 +840,13 @@ public class ParticipantServiceImpl implements ParticipantService {
         participant.setEmergencyRelation(req.getEmergencyRelation());
         track(changes, "emergencyPhone", participant.getEmergencyPhone(), req.getEmergencyPhone());
         participant.setEmergencyPhone(req.getEmergencyPhone());
+        track(changes, "emergencyPhoneCountryCode", participant.getEmergencyPhoneCountryCode(),
+                req.getEmergencyPhoneCountryCode());
+        participant.setEmergencyPhoneCountryCode(req.getEmergencyPhoneCountryCode());
+
+        if (req.getShirts() != null) {
+            applyExtraShirts(participant, req.getShirts(), eventId, changes);
+        }
 
         if (req.getSelectionAnswers() != null) {
             String before = answersText(participant.getSelectionAnswers());
@@ -823,6 +860,51 @@ public class ParticipantServiceImpl implements ParticipantService {
         }
 
         orderDetailRepository.save(participant);
+    }
+
+    /**
+     * Replace the runner's finisher / special shirts with the list sent (the race shirt is
+     * handled above). Each style must belong to this event and each size to its style.
+     */
+    private void applyExtraShirts(OrderDetail participant, List<OrderDetailShirtDto> wanted, Integer eventId,
+            List<ParticipantEditLogDto.Change> changes) {
+        String before = ShirtUtils.describeExtra(participant);
+        List<OrderDetailShirt> next = new ArrayList<>();
+        for (OrderDetailShirtDto dto : wanted) {
+            if (dto == null || isBlank(dto.getShirtTypeId())) {
+                continue;
+            }
+            ShirtType type = shirtTypeRepository.findByUuid(dto.getShirtTypeId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Shirt type not found"));
+            if (type.getEvent() == null || !Objects.equals(type.getEvent().getId(), eventId)) {
+                throw new BusinessException("แบบเสื้อที่เลือกไม่ได้อยู่ในอีเวนต์นี้");
+            }
+            String category = EventServiceImpl.normaliseShirtCategory(type.getCategory());
+            if ("RACE".equals(category)) {
+                continue;
+            }
+            ShirtSize size = null;
+            if (!isBlank(dto.getShirtSizeId())) {
+                size = shirtSizeRepository.findByUuid(dto.getShirtSizeId())
+                        .orElseThrow(() -> new ResourceNotFoundException("Shirt size not found"));
+                if (size.getShirtType() == null || !Objects.equals(size.getShirtType().getId(), type.getId())) {
+                    throw new BusinessException("ไซส์เสื้อที่เลือกไม่ตรงกับแบบเสื้อ");
+                }
+            }
+            // keep the existing row for the same category so its uuid survives
+            OrderDetailShirt row = participant.getShirts().stream()
+                    .filter(sh -> category.equalsIgnoreCase(sh.getCategory()) && !next.contains(sh))
+                    .findFirst()
+                    .orElseGet(OrderDetailShirt::new);
+            row.setOrderDetail(participant);
+            row.setShirtType(type);
+            row.setShirtSize(size);
+            row.setCategory(category);
+            next.add(row);
+        }
+        participant.getShirts().clear();
+        participant.getShirts().addAll(next);
+        track(changes, "extraShirts", before, ShirtUtils.describeExtra(participant));
     }
 
     /** The target distance's pricing for the same phase (Early Bird → Early Bird), else none. */

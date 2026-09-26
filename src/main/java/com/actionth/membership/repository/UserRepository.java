@@ -30,6 +30,10 @@ public interface UserRepository extends JpaRepository<User, Integer>, JpaSpecifi
     @Query("SELECT u FROM User u WHERE u.active = true AND u.role.roleType = :roleType")
     List<User> findAllActiveUsersByRoleType(@Param("roleType") String roleType);
 
+    /** Active admins allowed to activate organizer sign-ups. */
+    @Query("SELECT u FROM User u WHERE u.active = true AND u.role.roleType = 'admin' AND u.canApproveOrganizer = true")
+    List<User> findOrganizerApprovers();
+
     @Query("SELECT u.role.roleType, COUNT(u) FROM User u GROUP BY u.role.roleType")
     List<Object[]> countGroupByRoleType();
 

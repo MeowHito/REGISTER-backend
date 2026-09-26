@@ -24,6 +24,7 @@ public class UserProfileDTORequest {
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
     private OffsetDateTime birthDate;
     private String phone;
+    private String phoneCountryCode;
     private String nationality;
     private String idNo;
     private String healthIssues;
@@ -32,6 +33,7 @@ public class UserProfileDTORequest {
     private String emergencyContact;
     private String emergencyRelation;
     private String emergencyPhone;
+    private String emergencyPhoneCountryCode;
 
     private String prefixPath;
     private String pictureUrl;
@@ -50,6 +52,8 @@ public class UserProfileDTORequest {
     private String shippingZipcode;
 
     private Boolean isApprover;
+    /** Admin-only: may activate organizer sign-ups. */
+    private Boolean canApproveOrganizer;
 
     private String thumbPictureUrl;
     private String thumbSignaturePath;

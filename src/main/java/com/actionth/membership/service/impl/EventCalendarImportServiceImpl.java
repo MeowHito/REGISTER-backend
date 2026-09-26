@@ -98,6 +98,7 @@ public class EventCalendarImportServiceImpl implements EventCalendarImportServic
     private final RestTemplate http;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
+    private final AtomicBoolean stopRequested = new AtomicBoolean(false);
     /** Counters of the run in progress, read by the status endpoint while the job works. */
     private volatile EventCalendarImportResult currentRun;
 
@@ -143,10 +144,21 @@ public class EventCalendarImportServiceImpl implements EventCalendarImportServic
     }
 
     @Override
+    public boolean requestStop() {
+        if (!running.get()) {
+            return false;
+        }
+        stopRequested.set(true);
+        log.info("EventCalendar import: stop requested by an admin");
+        return true;
+    }
+
+    @Override
     public EventCalendarImportStatus getStatus() {
         return EventCalendarImportStatus.builder()
                 .enabled(enabled)
                 .running(running.get())
+                .stopping(running.get() && stopRequested.get())
                 .horizonMonths(readHorizon())
                 .source(source)
                 .sourceUrl(baseUrl)
@@ -178,6 +190,7 @@ public class EventCalendarImportServiceImpl implements EventCalendarImportServic
                 .horizonMonths(horizon)
                 .build();
         currentRun = result;
+        stopRequested.set(false);
         try {
             if (horizonMonths != null) {
                 writeConfig(CFG_HORIZON, String.valueOf(horizon));
@@ -196,6 +209,7 @@ public class EventCalendarImportServiceImpl implements EventCalendarImportServic
             result.setError(abbreviate(e.getClass().getSimpleName() + ": " + e.getMessage(), 80));
         } finally {
             result.setFinishedAt(OffsetDateTime.now());
+            result.setStopped(stopRequested.getAndSet(false));
             writeLastRun(result);
             currentRun = null;
             running.set(false);
@@ -244,7 +258,7 @@ public class EventCalendarImportServiceImpl implements EventCalendarImportServic
         int page = 1;
         int totalPages = 1;
 
-        while (page <= totalPages && processed < maxEventsPerRun) {
+        while (page <= totalPages && processed < maxEventsPerRun && !stopRequested.get()) {
             ResponseEntity<String> listing = http.exchange(listingUri(watermark, page), HttpMethod.GET,
                     new HttpEntity<>(new HttpHeaders()), String.class);
             String totalHeader = listing.getHeaders().getFirst("X-WP-TotalPages");
@@ -261,7 +275,7 @@ public class EventCalendarImportServiceImpl implements EventCalendarImportServic
             }
 
             for (JsonNode item : items) {
-                if (processed >= maxEventsPerRun) {
+                if (processed >= maxEventsPerRun || stopRequested.get()) {
                     break;
                 }
                 processed++;

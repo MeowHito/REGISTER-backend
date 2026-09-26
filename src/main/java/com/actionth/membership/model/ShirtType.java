@@ -41,6 +41,25 @@ public class ShirtType extends StandardFields {
     @Column(length = 1000)
     private String description;
 
+    /**
+     * Which garment this style belongs to: RACE (the shirt every runner gets), FINISHER or
+     * SPECIAL (e.g. VIP). A runner picks one style per category the event offers; RACE is
+     * stored on {@code orderDetail.shirtType/shirtSize}, the others in {@code orderDetailShirt}.
+     */
+    @Builder.Default
+    @Column(length = 20)
+    private String category = "RACE";
+
+    /** Display order inside its category (lower first). */
+    private Integer position;
+
+    /**
+     * Comma-separated event-type uuids this style is offered to; null or empty = every distance.
+     * Lets a VIP or finisher shirt be shown only to the distances that include it.
+     */
+    @Column(length = 2000)
+    private String eventTypeIds;
+
     @OneToMany(mappedBy = "shirtType", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @LazyCollection(LazyCollectionOption.FALSE)
     @JsonManagedReference("shirtType-shirtSizes")

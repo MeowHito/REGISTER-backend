@@ -33,4 +33,7 @@ public class ShirtSize extends StandardFields {
     private String name;
     private BigDecimal chestSize;
     private BigDecimal lengthSize;
+
+    /** Display order inside the style (lower first); lets an organizer insert a size without renaming. */
+    private Integer position;
 }

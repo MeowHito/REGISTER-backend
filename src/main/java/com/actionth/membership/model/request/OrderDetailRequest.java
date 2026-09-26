@@ -7,6 +7,7 @@ import java.util.List;
 
 import org.springframework.format.annotation.DateTimeFormat;
 
+import com.actionth.membership.model.dto.OrderDetailShirtDto;
 import com.actionth.membership.model.dto.SelectionAnswerDto;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
@@ -26,6 +27,7 @@ public class OrderDetailRequest {
 
     private String email;
     private String phone;
+    private String phoneCountryCode;
     private String nationality;
     private String idNo;
     private String healthIssues;
@@ -34,8 +36,14 @@ public class OrderDetailRequest {
     private String emergencyContact;
     private String emergencyRelation;
     private String emergencyPhone;
+    private String emergencyPhoneCountryCode;
 
     private String teamClub;
+    /** 1-based team number inside this order for team distances; null for individuals. */
+    private Integer teamGroup;
+
+    /** Extra shirts (finisher / special) besides shirtTypeId/shirtSizeId, which stay the race shirt. */
+    private List<OrderDetailShirtDto> shirts;
 
     private String deliveryMethod;
 

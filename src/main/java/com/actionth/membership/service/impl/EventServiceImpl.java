@@ -7,6 +7,9 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.UUID;
 import java.util.HashSet;
 import java.util.Comparator;
 import java.util.List;
@@ -58,6 +61,11 @@ import com.actionth.membership.model.Pricing;
 import com.actionth.membership.model.ShirtSize;
 import com.actionth.membership.model.EventAddOn;
 import com.actionth.membership.model.ShirtType;
+import com.actionth.membership.model.EventQuestionSection;
+import com.actionth.membership.model.dto.EventQuestionSectionDto;
+import com.actionth.membership.repository.OrderDetailShirtRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.actionth.membership.model.StandardFields;
 import com.actionth.membership.model.User;
 import com.actionth.membership.model.dto.AgeGroupDto;
@@ -104,6 +112,8 @@ public class EventServiceImpl implements EventService {
 	private final UserRepository userRepository;
 	private final OrderDetailRepository orderDetailRepository;
 	private final OrderAddOnRepository orderAddOnRepository;
+	private final OrderDetailShirtRepository orderDetailShirtRepository;
+	private final ObjectMapper objectMapper;
 	private final PricingRepository pricingRepository;
 	private final ModelMapper modelMapper;
 	private final ContextUtils contextUtils;
@@ -418,7 +428,8 @@ public class EventServiceImpl implements EventService {
 
 		for (ShirtType existingSt : entity.getShirtTypes()) {
 			if (existingSt.getUuid() != null && !dtoShirtTypeIds.contains(existingSt.getUuid())) {
-				boolean hasSelection = orderDetailRepository.existsByShirtTypeIdAndActiveOrder(existingSt.getId());
+				boolean hasSelection = orderDetailRepository.existsByShirtTypeIdAndActiveOrder(existingSt.getId())
+						|| orderDetailShirtRepository.existsByShirtTypeIdAndActiveOrder(existingSt.getId());
 				if (hasSelection) {
 					throw new EventModificationException(
 							"ไม่สามารถลบประเภทเสื้อได้ เนื่องจากมีผู้สมัครเลือกประเภทนี้แล้ว",
@@ -441,7 +452,8 @@ public class EventServiceImpl implements EventService {
 
 					for (ShirtSize existingSz : existingSt.getShirtSizes()) {
 						if (existingSz.getUuid() != null && !dtoShirtSizeIds.contains(existingSz.getUuid())) {
-							boolean hasSelection = orderDetailRepository.existsByShirtSizeIdAndActiveOrder(existingSz.getId());
+							boolean hasSelection = orderDetailRepository.existsByShirtSizeIdAndActiveOrder(existingSz.getId())
+									|| orderDetailShirtRepository.existsByShirtSizeIdAndActiveOrder(existingSz.getId());
 							if (hasSelection) {
 								throw new EventModificationException(
 										"ไม่สามารถลบไซส์เสื้อได้ เนื่องจากมีผู้สมัครเลือกไซส์นี้แล้ว",
@@ -693,6 +705,7 @@ public class EventServiceImpl implements EventService {
 		} else if (!isUpdate) {
 			entity.setTestMode(false);
 		}
+		entity.setFieldConfig(writeFieldConfig(dto.getFieldConfig()));
 
 		if (dto.getProvinceId() != null) {
 			CountryState countryState = eventRepository.findCountryStateByUuid(dto.getProvinceId())
@@ -767,9 +780,17 @@ public class EventServiceImpl implements EventService {
 
 			st.setName(dtoSt.getName());
 			st.setDescription(dtoSt.getDescription());
+			st.setCategory(normaliseShirtCategory(dtoSt.getCategory()));
+			st.setPosition(dtoSt.getPosition());
+			st.setEventTypeIds(dtoSt.getEventTypeIds() == null || dtoSt.getEventTypeIds().isEmpty()
+					? null
+					: String.join(",", dtoSt.getEventTypeIds()));
 			st.setEvent(entity);
 
-			mergeChild(st.getShirtSizes(), dtoSt.getShirtSizes(), (dtoSz, szMap) -> {
+			// Sizes keep their uuid (and so their registrants) wherever they are moved to; the
+			// position is the order the organizer arranged them in.
+			List<ShirtSizeDto> sizeDtos = dtoSt.getShirtSizes() != null ? dtoSt.getShirtSizes() : List.of();
+			mergeChild(st.getShirtSizes(), sizeDtos, (dtoSz, szMap) -> {
 				ShirtSize sz = isUpdate && dtoSz.getId() != null
 						&& szMap.containsKey(dtoSz.getId())
 								? szMap.get(dtoSz.getId())
@@ -777,12 +798,18 @@ public class EventServiceImpl implements EventService {
 				sz.setName(dtoSz.getName());
 				sz.setChestSize(dtoSz.getChestSize());
 				sz.setLengthSize(dtoSz.getLengthSize());
+				sz.setPosition(dtoSz.getPosition() != null ? dtoSz.getPosition() : sizeDtos.indexOf(dtoSz));
 				sz.setShirtType(st);
 				return sz;
 			});
 
 			return st;
 		});
+		for (int i = 0; i < entity.getShirtTypes().size(); i++) {
+			if (entity.getShirtTypes().get(i).getPosition() == null) {
+				entity.getShirtTypes().get(i).setPosition(i);
+			}
+		}
 
 		// === EventTypes ===
 		Map<String, EventType> eventTypeMap = entity.getEventTypes().stream()
@@ -802,6 +829,17 @@ public class EventServiceImpl implements EventService {
 			eventType.setIsNoShirt(et.getIsNoShirt());
 			eventType.setDiscountNoShirt(et.getDiscountNoShirt());
 			eventType.setIsTeam(et.getIsTeam());
+			if (Boolean.TRUE.equals(et.getIsTeam())) {
+				if (et.getTeamSize() == null || et.getTeamSize() < 2) {
+					throw new EventModificationException("ประเภทการแข่งขันแบบทีมต้องกำหนดจำนวนสมาชิกต่อทีมอย่างน้อย 2 คน",
+							"eventType.teamSize", et.getName());
+				}
+				eventType.setTeamSize(et.getTeamSize());
+				eventType.setTeamPricing("PER_TEAM".equalsIgnoreCase(et.getTeamPricing()) ? "PER_TEAM" : "PER_PERSON");
+			} else {
+				eventType.setTeamSize(null);
+				eventType.setTeamPricing(null);
+			}
 			eventType.setEvent(entity);
 
 			// === Pricing ===
@@ -846,6 +884,7 @@ public class EventServiceImpl implements EventService {
 				f.setTitleEn(dtoF.getTitleEn());
 				f.setType(dtoF.getType());
 				f.setRequired(dtoF.isRequired());
+				f.setPosition(dtoF.getPosition());
 				f.setEventType(eventType);
 
 				mergeChild(f.getOptions(), dtoF.getOptions(), (dtoO, existingOptMap) -> {
@@ -870,6 +909,29 @@ public class EventServiceImpl implements EventService {
 		entity.getEventTypes().clear();
 		entity.getEventTypes().addAll(newEventTypes);
 
+		// === Sponsor questionnaire sections (before the fields, which point at them) ===
+		Map<String, EventQuestionSection> sectionByDtoId = new HashMap<>();
+		List<EventQuestionSectionDto> sectionDtos = dto.getQuestionSections() != null ? dto.getQuestionSections() : List.of();
+		mergeChild(entity.getQuestionSections(), sectionDtos, (dtoS, existingMap) -> {
+			EventQuestionSection sec = isUpdate && dtoS.getId() != null && existingMap.containsKey(dtoS.getId())
+					? existingMap.get(dtoS.getId())
+					: new EventQuestionSection();
+			sec.setTitle(dtoS.getTitle());
+			sec.setTitleEn(dtoS.getTitleEn());
+			sec.setDescription(dtoS.getDescription());
+			sec.setLogoUrl(dtoS.getLogoUrl());
+			sec.setPrefixPath(dtoS.getPrefixPath());
+			sec.setPosition(dtoS.getPosition() != null ? dtoS.getPosition() : sectionDtos.indexOf(dtoS));
+			if (sec.getShareToken() == null || sec.getShareToken().isBlank()) {
+				sec.setShareToken(UUID.randomUUID().toString().replace("-", ""));
+			}
+			sec.setEvent(entity);
+			if (dtoS.getId() != null) {
+				sectionByDtoId.put(dtoS.getId(), sec);
+			}
+			return sec;
+		});
+
 		// === EventSelection Field ===
 		mergeChild(entity.getSelectionFields(), dto.getSelectionFields(), (dtoF, existingMap) -> {
 			EventSelectionField f = isUpdate && dtoF.getId() != null && existingMap.containsKey(dtoF.getId())
@@ -880,6 +942,8 @@ public class EventServiceImpl implements EventService {
 			f.setTitleEn(dtoF.getTitleEn());
 			f.setType(dtoF.getType());
 			f.setRequired(dtoF.isRequired());
+			f.setPosition(dtoF.getPosition());
+			f.setSection(dtoF.getSectionId() != null ? sectionByDtoId.get(dtoF.getSectionId()) : null);
 			f.setEvent(entity);
 
 			// === Options ===
@@ -1030,6 +1094,8 @@ public class EventServiceImpl implements EventService {
 				.isDraft(event.getIsDraft())
 				.showChecklist(event.getShowChecklist())
 				.testMode(Boolean.TRUE.equals(event.getTestMode()))
+				.fieldConfig(readFieldConfig(event.getFieldConfig()))
+				.questionSections(mapQuestionSections(event))
 				.eventConditions(event.getEventConditions().stream()
 						.map(ec -> EventConditionDto.builder()
 								.id(ec.getUuid())
@@ -1046,12 +1112,15 @@ public class EventServiceImpl implements EventService {
 						.build()).toList())
 
 				.selectionFields(event.getSelectionFields().stream()
+						.sorted(Comparator.comparing(f -> f.getPosition() != null ? f.getPosition() : Integer.MAX_VALUE))
 						.map(field -> EventSelectionFieldDto.builder()
 								.id(field.getUuid())
 								.title(field.getTitle())
 								.titleEn(field.getTitleEn())
 								.type(field.getType())
 								.required(field.isRequired())
+								.sectionId(field.getSection() != null ? field.getSection().getUuid() : null)
+								.position(field.getPosition())
 								.options(field.getOptions().stream()
 										.map(opt -> EventSelectionOptionDto.builder()
 												.id(opt.getUuid())
@@ -1079,6 +1148,8 @@ public class EventServiceImpl implements EventService {
 						.isNoShirt(et.getIsNoShirt())
 						.discountNoShirt(et.getDiscountNoShirt())
 						.isTeam(et.getIsTeam())
+						.teamSize(et.getTeamSize())
+						.teamPricing(et.getTeamPricing())
 
 						.pricing(mapPricingWithCalculatedStartDate(et))
 
@@ -1092,12 +1163,15 @@ public class EventServiceImpl implements EventService {
 								.position(ag.getPosition())
 								.build()).toList())
 
-						.selectionFields(et.getSelectionFields().stream().map(f -> EventSelectionFieldDto.builder()
+						.selectionFields(et.getSelectionFields().stream()
+								.sorted(Comparator.comparing(f -> f.getPosition() != null ? f.getPosition() : Integer.MAX_VALUE))
+								.map(f -> EventSelectionFieldDto.builder()
 								.id(f.getUuid())
 								.title(f.getTitle())
 								.titleEn(f.getTitleEn())
 								.type(f.getType())
 								.required(f.isRequired())
+								.position(f.getPosition())
 								.options(f.getOptions().stream().map(o -> EventSelectionOptionDto.builder()
 										.id(o.getUuid())
 										.value(o.getValue())
@@ -1108,20 +1182,124 @@ public class EventServiceImpl implements EventService {
 								.build()).toList())
 						.build()).toList())
 				.addOns(mapAddOns(event))
-				.shirtTypes(event.getShirtTypes().stream().map(st -> ShirtTypeDto.builder()
+				.shirtTypes(mapShirtTypes(event))
+				.build();
+	}
+
+	private static final List<String> SHIRT_CATEGORY_ORDER = List.of("RACE", "FINISHER", "SPECIAL");
+
+	static String normaliseShirtCategory(String category) {
+		String c = category != null ? category.trim().toUpperCase() : "";
+		return SHIRT_CATEGORY_ORDER.contains(c) ? c : "RACE";
+	}
+
+	private static int pos(Integer position) {
+		return position != null ? position : Integer.MAX_VALUE;
+	}
+
+	/**
+	 * Styles grouped by category (race, finisher, special) in the organizer's order, sizes in
+	 * their arranged order, each size carrying how many runners already hold it so the back
+	 * office can warn before a rename.
+	 */
+	private List<ShirtTypeDto> mapShirtTypes(Event event) {
+		Map<String, Long> used = new HashMap<>();
+		if (event.getId() != null) {
+			for (Object[] row : orderDetailRepository.countBySizeForEvent(event.getId())) {
+				used.merge((String) row[0], ((Number) row[1]).longValue(), Long::sum);
+			}
+			for (Object[] row : orderDetailShirtRepository.countBySizeForEvent(event.getId())) {
+				used.merge((String) row[0], ((Number) row[1]).longValue(), Long::sum);
+			}
+		}
+		return event.getShirtTypes().stream()
+				.sorted(Comparator.<ShirtType>comparingInt(st -> SHIRT_CATEGORY_ORDER.indexOf(normaliseShirtCategory(st.getCategory())))
+						.thenComparingInt(st -> pos(st.getPosition())))
+				.map(st -> ShirtTypeDto.builder()
 						.id(st.getUuid())
 						.name(st.getName())
 						.description(st.getDescription())
+						.category(normaliseShirtCategory(st.getCategory()))
+						.position(st.getPosition())
+						.eventTypeIds(st.getEventTypeIds() == null || st.getEventTypeIds().isBlank()
+								? List.of()
+								: Stream.of(st.getEventTypeIds().split(",")).map(String::trim).filter(v -> !v.isEmpty()).toList())
 						.shirtSizes(st.getShirtSizes().stream()
+								.sorted(Comparator.comparingInt(sz -> pos(sz.getPosition())))
 								.map(sz -> ShirtSizeDto.builder()
 										.id(sz.getUuid())
 										.name(sz.getName())
 										.chestSize(sz.getChestSize())
 										.lengthSize(sz.getLengthSize())
+										.position(sz.getPosition())
+										.usedCount(used.getOrDefault(sz.getUuid(), 0L))
 										.build())
 								.toList())
-						.build()).toList())
-				.build();
+						.build())
+				.toList();
+	}
+
+	/** The sponsor share token is only handed to people who may edit the event. */
+	private List<EventQuestionSectionDto> mapQuestionSections(Event event) {
+		boolean canEdit = canEditEvent(event);
+		return event.getQuestionSections().stream()
+				.sorted(Comparator.comparingInt(sec -> pos(sec.getPosition())))
+				.map(sec -> EventQuestionSectionDto.builder()
+						.id(sec.getUuid())
+						.title(sec.getTitle())
+						.titleEn(sec.getTitleEn())
+						.description(sec.getDescription())
+						.logoUrl(sec.getLogoUrl())
+						.prefixPath(sec.getPrefixPath())
+						.position(sec.getPosition())
+						.shareToken(canEdit ? sec.getShareToken() : null)
+						.build())
+				.toList();
+	}
+
+	private boolean canEditEvent(Event event) {
+		if (isCurrentUserAdmin()) {
+			return true;
+		}
+		Integer userId = contextUtils.getCurrentUserIdOrNull();
+		if (userId == null) {
+			return false;
+		}
+		if (event.getOrganizer() != null && userId.equals(event.getOrganizer().getId())) {
+			return true;
+		}
+		return event.getEventPermissions().stream()
+				.anyMatch(p -> p.getUser() != null && userId.equals(p.getUser().getId())
+						&& !Boolean.FALSE.equals(p.getActive()) && Boolean.TRUE.equals(p.getCanUpdate()));
+	}
+
+	private String writeFieldConfig(Map<String, String> config) {
+		if (config == null || config.isEmpty()) {
+			return null;
+		}
+		try {
+			Map<String, String> clean = new LinkedHashMap<>();
+			config.forEach((k, v) -> {
+				if (k != null && v != null && !v.isBlank()) {
+					clean.put(k, v.trim().toUpperCase());
+				}
+			});
+			return clean.isEmpty() ? null : objectMapper.writeValueAsString(clean);
+		} catch (Exception e) {
+			throw new IllegalArgumentException("fieldConfig ไม่ถูกต้อง", e);
+		}
+	}
+
+	private Map<String, String> readFieldConfig(String json) {
+		if (json == null || json.isBlank()) {
+			return Map.of();
+		}
+		try {
+			return objectMapper.readValue(json, new TypeReference<LinkedHashMap<String, String>>() {
+			});
+		} catch (Exception e) {
+			return Map.of();
+		}
 	}
 
 	/**

@@ -11,6 +11,8 @@ import lombok.Data;
 public class EventCalendarImportStatus {
     private boolean enabled;
     private boolean running;
+    /** An admin pressed stop; the run ends after the item it is on. */
+    private boolean stopping;
     /** Horizon used by the nightly job (last value chosen in the back office). */
     private int horizonMonths;
     private String source;

@@ -30,5 +30,8 @@ public class EventTypeDto {
     private List<EventSelectionFieldDto> selectionFields;
 
     private Boolean isTeam;
+    private Integer teamSize;
+    /** PER_PERSON or PER_TEAM (see EventType). */
+    private String teamPricing;
     private Boolean isQuotaFull;
 }

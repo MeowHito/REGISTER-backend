@@ -165,9 +165,13 @@
                                                 <span th:text="${a.eventTypeName} ?: '-'">Type</span> <span th:text="${a.ageGroupName}"></span>
                                                 <span th:if="${a['teamClub'] != null and a['teamClub'] != ''}">
                                                     &middot; <span th:text="${a['teamClub']}">TeamClub</span>
+                                                    <span th:if="${a['teamGroup'] != null}">(ทีมที่ <span th:text="${a['teamGroup']}">1</span>)</span>
                                                 </span>
                                                 <br />
                                                 เสื้อ: <span th:text="${(a.shirtSizeName == null or a.shirtSizeName == 'No Shirt') ? 'ไม่รับเสื้อ' : ((a.shirtTypeName ?: '-') + ' / ' + a.shirtSizeName)}">Shirt</span>
+                                                <span th:if="${a['extraShirts'] != null and a['extraShirts'] != ''}">
+                                                    &middot; <span th:text="${a['extraShirts']}">Extra shirts</span>
+                                                </span>
                                                 &middot; รับเสื้อและอุปกรณ์: <span th:text="${a.deliveryMethod} == 'post' ? 'ไปรษณีย์' : 'รับหน้างาน'">Delivery</span>
                                             </p>
                                         </td>

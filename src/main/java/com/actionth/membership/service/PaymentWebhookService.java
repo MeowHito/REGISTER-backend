@@ -522,6 +522,44 @@ public class PaymentWebhookService {
 
         emailService.sendGeneralTemplateEmail(request);
         log.info("[Email] Email sent successfully for orderNo={}, uuid={}", order.getOrderNo(), order.getUuid());
+
+        // Team registrations: every member gets the same confirmation, not only the buyer.
+        for (String memberEmail : teamMemberEmails(order)) {
+            TemplateEmailRequest copy = new TemplateEmailRequest();
+            copy.setTo(memberEmail);
+            copy.setSubject(subject);
+            copy.setOrderId(order.getUuid());
+            copy.setTemplateName("payment-success");
+            copy.setVariables(variables);
+            try {
+                emailService.sendGeneralTemplateEmail(copy);
+                log.info("[Email] Team member copy sent to {} for orderNo={}", memberEmail, order.getOrderNo());
+            } catch (Exception e) {
+                log.warn("[Email] Team member copy to {} failed for orderNo={}: {}", memberEmail, order.getOrderNo(),
+                        e.getMessage());
+            }
+        }
+    }
+
+    /** Distinct member e-mails of the order's team runners, minus the buyer's own address. */
+    private java.util.List<String> teamMemberEmails(Orders order) {
+        String buyer = order.getCreatedBy() != null && order.getCreatedBy().getEmail() != null
+                ? order.getCreatedBy().getEmail().trim().toLowerCase()
+                : "";
+        java.util.LinkedHashSet<String> emails = new java.util.LinkedHashSet<>();
+        if (order.getOrderDetails() == null) {
+            return java.util.List.of();
+        }
+        for (OrderDetail d : order.getOrderDetails()) {
+            if (d.getTeamGroup() == null || d.getEmail() == null || d.getEmail().isBlank()) {
+                continue;
+            }
+            String email = d.getEmail().trim();
+            if (!email.equalsIgnoreCase(buyer) && email.contains("@")) {
+                emails.add(email);
+            }
+        }
+        return new ArrayList<>(emails);
     }
 
     /**
@@ -822,6 +860,8 @@ public class PaymentWebhookService {
         app.put("ageGroupName", AgeGroupUtils.resolveAgeGroup(d));
         app.put("deliveryMethod", d.getDeliveryMethod());
         app.put("teamClub", d.getTeamClub());
+        app.put("teamGroup", d.getTeamGroup());
+        app.put("extraShirts", com.actionth.membership.utils.ShirtUtils.describeExtra(d));
 
         log.debug("[Email Applicant] EventType={}, AgeGroup={}, DeliveryMethod={}",
                 d.getEventType() != null ? d.getEventType().getName() : "null",

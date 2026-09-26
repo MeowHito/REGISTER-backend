@@ -1,24 +1,21 @@
 package com.actionth.membership.model.dto;
 
-import java.util.List;
-
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/** One garment a runner picked: the race shirt or an extra (finisher / special) one. */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ShirtTypeDto {
+public class OrderDetailShirtDto {
     private String id;
-    private String name;
-    private String description;
     /** RACE / FINISHER / SPECIAL */
     private String category;
-    private Integer position;
-    /** Event-type uuids this style is offered to; empty = every distance. */
-    private List<String> eventTypeIds;
-    private List<ShirtSizeDto> shirtSizes;
+    private String shirtTypeId;
+    private String shirtTypeName;
+    private String shirtSizeId;
+    private String shirtSizeName;
 }

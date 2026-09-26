@@ -85,6 +85,14 @@ public class UserController {
         return new Response<>(null, "Update status successfully", true);
     }
 
+    /** Grant / revoke the organizer-approval right of an admin account. */
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/updateApprover")
+    public Response<Void> updateApprover(@RequestBody UserProfileDTORequest user) {
+        userService.updateApprover(user.getId(), Boolean.TRUE.equals(user.getCanApproveOrganizer()));
+        return new Response<>(null, "Updated", true);
+    }
+
     @GetMapping("/getOrganizerActive")
     public Response<List<UserViewDto>> getOrganizerActive() {
         return new Response<>(userService.getUserActiveByRole("organizer"), "Users retrieved successfully", true);

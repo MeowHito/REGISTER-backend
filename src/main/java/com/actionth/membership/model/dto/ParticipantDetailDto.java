@@ -35,6 +35,7 @@ public class ParticipantDetailDto {
     // Contact
     private String email;
     private String phone;
+    private String phoneCountryCode;
     private String address;
     private String province;
     private String amphoe;
@@ -47,6 +48,7 @@ public class ParticipantDetailDto {
     private String emergencyContact;
     private String emergencyRelation;
     private String emergencyPhone;
+    private String emergencyPhoneCountryCode;
 
     // Event
     private String eventTypeName;
@@ -57,6 +59,9 @@ public class ParticipantDetailDto {
     private Boolean receiveShirt;
     private String shirtTypeName;
     private String shirtSizeName;
+    /** Finisher / special shirts besides the race shirt. */
+    private List<OrderDetailShirtDto> extraShirts;
+    private Integer teamGroup;
     private String deliveryMethod;
     private String shippingAddress;
     private String shippingProvince;

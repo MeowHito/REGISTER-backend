@@ -16,4 +16,7 @@ public class ShirtSizeDto {
     private String name;
     private BigDecimal chestSize;
     private BigDecimal lengthSize;
+    private Integer position;
+    /** Runners (paid or holding a slot) who picked this size; read-only, for the back office. */
+    private Long usedCount;
 }

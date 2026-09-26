@@ -3,6 +3,7 @@ package com.actionth.membership.model.dto;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.format.annotation.DateTimeFormat;
 
@@ -55,4 +56,7 @@ public class EventDto {
     private List<ShirtTypeDto> shirtTypes;
     private List<EventSelectionFieldDto> selectionFields;
     private List<EventAddOnDto> addOns;
+    private List<EventQuestionSectionDto> questionSections;
+    /** field key -> HIDDEN | OPTIONAL | REQUIRED; missing keys use the platform default. */
+    private Map<String, String> fieldConfig;
 }

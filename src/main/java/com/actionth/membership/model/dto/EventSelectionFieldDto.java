@@ -18,5 +18,8 @@ public class EventSelectionFieldDto {
     private String titleEn;
     private SelectionType type;
     private boolean required;
+    /** Sponsor questionnaire group (EventQuestionSectionDto.id) or null. */
+    private String sectionId;
+    private Integer position;
     private List<EventSelectionOptionDto> options;
 }

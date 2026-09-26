@@ -12,6 +12,7 @@ public class OrderItemResponse {
     private String lastName;
     private String email;
     private String phone;
+    private String phoneCountryCode;
     private String idNo;
     private String gender;
     private String nationality;
@@ -27,6 +28,10 @@ public class OrderItemResponse {
     private String shippingZipcode;
     private String deliveryMethod;
     private String teamClub;
+    private Integer teamGroup;
+    private String emergencyPhoneCountryCode;
+    /** Finisher / special shirts besides the race shirt. */
+    private List<OrderDetailShirtDto> extraShirts;
     private Boolean receiveShirt;
     private Boolean rules;
     private Double price;

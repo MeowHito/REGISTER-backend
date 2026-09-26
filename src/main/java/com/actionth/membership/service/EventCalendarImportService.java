@@ -28,5 +28,8 @@ public interface EventCalendarImportService {
 
     boolean isRunning();
 
+    /** Asks the run in progress to stop after the item it is on; no-op when idle. */
+    boolean requestStop();
+
     EventCalendarImportStatus getStatus();
 }

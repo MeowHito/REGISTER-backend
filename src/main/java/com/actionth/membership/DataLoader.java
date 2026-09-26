@@ -126,7 +126,7 @@ public class DataLoader implements CommandLineRunner {
 
 		if (userRepository.count() == 0) {
 			List<User> users = List.of(
-					User.builder().firstName("Test").lastName("Admin").email("testAdmin@dione.zone")
+					User.builder().firstName("Test").lastName("Admin").email("testAdmin@dione.zone").canApproveOrganizer(true)
 						.password(passwordEncoder.encode(seedUserPassword))
 						.role(roleRepository.findByRole("admin")
 								.orElseThrow(() -> new IllegalArgumentException("Role not found: admin")))

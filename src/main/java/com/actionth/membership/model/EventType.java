@@ -72,4 +72,14 @@ public class EventType extends StandardFields {
     private List<EventSelectionField> selectionFields = new ArrayList<>();
 
     private Boolean isTeam;
+
+    /** Members per team when {@link #isTeam}; every team registered must have exactly this many. */
+    private Integer teamSize;
+
+    /**
+     * How a team distance is priced: PER_PERSON (price x members) or PER_TEAM (the price is for the
+     * whole team and is charged once, on the first member).
+     */
+    @Column(length = 20)
+    private String teamPricing;
 }

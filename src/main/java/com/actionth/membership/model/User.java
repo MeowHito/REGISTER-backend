@@ -51,6 +51,8 @@ public class User extends StandardFields {
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
     private OffsetDateTime birthDate;
     private String phone;
+    @Column(length = 8)
+    private String phoneCountryCode;
     private String nationality;
     private String idNo;
     private String healthIssues;
@@ -59,6 +61,8 @@ public class User extends StandardFields {
     private String emergencyContact;
     private String emergencyRelation;
     private String emergencyPhone;
+    @Column(length = 8)
+    private String emergencyPhoneCountryCode;
 
     private String prefixPath;
     private String pictureUrl;
@@ -77,6 +81,9 @@ public class User extends StandardFields {
     private String shippingZipcode;
 
     private Boolean isApprover;
+
+    /** Admin-only: may activate organizer sign-ups and receives the "organizer pending" bell. */
+    private Boolean canApproveOrganizer;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @LazyCollection(LazyCollectionOption.FALSE)

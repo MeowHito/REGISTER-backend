@@ -235,6 +235,7 @@ public class UserServiceImpl implements UserService {
         user.setGender(userDto.getGender());
         user.setBirthDate(userDto.getBirthDate());
         user.setPhone(userDto.getPhone());
+        user.setPhoneCountryCode(userDto.getPhoneCountryCode());
         user.setNationality(userDto.getNationality());
         // Only allow setting idNo if not already set, unless current user is admin
         User currentUser = getCurrentUserSession();
@@ -247,6 +248,7 @@ public class UserServiceImpl implements UserService {
         user.setEmergencyContact(userDto.getEmergencyContact());
         user.setEmergencyRelation(userDto.getEmergencyRelation());
         user.setEmergencyPhone(userDto.getEmergencyPhone());
+        user.setEmergencyPhoneCountryCode(userDto.getEmergencyPhoneCountryCode());
         user.setPrefixPath(userDto.getPrefixPath());
         user.setPictureUrl(userDto.getPictureUrl());
         user.setSignatureUrl(userDto.getSignatureUrl());
@@ -387,7 +389,27 @@ public class UserServiceImpl implements UserService {
     public void updateStatus(UserProfileDTORequest userDto) {
         User user = this.findByUuid(userDto.getId());
 
+        // Activating an organizer is the approval step: only admins holding the approver
+        // flag may do it (deactivating, and every other role, stays open to any admin).
+        boolean organizer = user.getRole() != null && "organizer".equalsIgnoreCase(user.getRole().getRoleType());
+        if (organizer && Boolean.TRUE.equals(userDto.getActive()) && !Boolean.TRUE.equals(user.getActive())) {
+            User actor = getCurrentUserSession();
+            if (actor == null || !Boolean.TRUE.equals(actor.getCanApproveOrganizer())) {
+                throw new ValidationException("ท่านไม่มีสิทธิ์อนุมัติผู้จัดงาน กรุณาติดต่อแอดมินที่มีสิทธิ์อนุมัติ");
+            }
+        }
+
         user.setActive(userDto.getActive());
+        userRepository.save(user);
+    }
+
+    @Override
+    public void updateApprover(String uuid, boolean canApprove) {
+        User user = this.findByUuid(uuid);
+        if (user.getRole() == null || !"admin".equalsIgnoreCase(user.getRole().getRoleType())) {
+            throw new ValidationException("กำหนดสิทธิ์อนุมัติผู้จัดงานได้เฉพาะผู้ใช้ที่เป็นแอดมิน");
+        }
+        user.setCanApproveOrganizer(canApprove);
         userRepository.save(user);
     }
 
@@ -456,6 +478,7 @@ public class UserServiceImpl implements UserService {
                 userMapper.setRole(user.getRole().getRole());
                 userMapper.setRoleType(user.getRole().getRoleType());
                 userMapper.setActive(user.getActive());
+                userMapper.setCanApproveOrganizer(Boolean.TRUE.equals(user.getCanApproveOrganizer()));
                 String prefixPath = user.getPrefixPath();
                 String thumbPictureUrl = user.getPictureUrl();
                 if (prefixPath != null && !prefixPath.isEmpty()) {

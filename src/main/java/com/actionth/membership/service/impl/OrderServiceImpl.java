@@ -11,6 +11,10 @@ import com.actionth.membership.model.dto.OrderUpdateResponse;
 import com.actionth.membership.model.EventAddOn;
 import com.actionth.membership.model.OrderAddOn;
 import com.actionth.membership.model.OrderDetail;
+import com.actionth.membership.model.OrderDetailShirt;
+import com.actionth.membership.model.dto.OrderDetailShirtDto;
+import com.actionth.membership.utils.RegistrationFieldConfig;
+import java.util.LinkedHashMap;
 import com.actionth.membership.repository.OrderRepository;
 import com.actionth.membership.model.request.OrderRequest;
 import com.actionth.membership.model.request.OrderUpdateRequest;
@@ -60,6 +64,7 @@ import com.actionth.membership.repository.PricingRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.actionth.membership.constant.PaymentFee;
 import com.actionth.membership.constant.PaymentStatus;
+import com.actionth.membership.exception.BusinessException;
 import com.actionth.membership.exception.QuotaExceededException;
 import com.actionth.membership.exception.ResourceNotFoundException;
 import com.actionth.membership.model.Coupon;
@@ -184,6 +189,7 @@ public class OrderServiceImpl implements OrderService {
 
             order.setEvent(event);
             order.setPaymentDateTime(null);
+            validateRequiredFields(event, orderRequest);
 
             if (orderRequest.getOrderDetails() != null && !orderRequest.getOrderDetails().isEmpty()) {
                 List<OrderDetail> details = new ArrayList<>();
@@ -225,6 +231,7 @@ public class OrderServiceImpl implements OrderService {
                                 });
                         orderDetail.setShirtSize(shirtSize);
                     }
+                    attachExtraShirts(orderDetail, req, event);
                     if (req.getPricingId() != null) {
                         final int detailIndex = i;
                         Pricing pricing = pricingRepository.findByUuid(req.getPricingId())
@@ -240,6 +247,7 @@ public class OrderServiceImpl implements OrderService {
                     orderDetail.setRules(true);
                     details.add(orderDetail);
                 }
+                validateTeams(details);
                 order.setOrderDetails(details);
             }
 
@@ -551,6 +559,7 @@ public class OrderServiceImpl implements OrderService {
         BigDecimal registration = BigDecimal.ZERO;
         BigDecimal shipping = BigDecimal.ZERO;
         boolean shippingCharged = false;
+        Set<String> chargedTeams = new HashSet<>();
 
         for (OrderDetail od : order.getOrderDetails()) {
             EventType eventType = od.getEventType();
@@ -566,6 +575,13 @@ public class OrderServiceImpl implements OrderService {
 
             BigDecimal price = pricing != null ? pricing.getPrice() : eventType.getPrice();
             price = price != null ? price : BigDecimal.ZERO;
+            if (Boolean.TRUE.equals(eventType.getIsTeam()) && "PER_TEAM".equalsIgnoreCase(eventType.getTeamPricing())
+                    && od.getTeamGroup() != null) {
+                // A whole-team price is charged once, on the team's first member.
+                if (!chargedTeams.add(eventType.getId() + ":" + od.getTeamGroup())) {
+                    price = BigDecimal.ZERO;
+                }
+            }
             BigDecimal detailShipping = BigDecimal.ZERO;
             if (!shippingCharged && "post".equalsIgnoreCase(od.getDeliveryMethod())) {
                 detailShipping = eventShippingFee;
@@ -601,6 +617,137 @@ public class OrderServiceImpl implements OrderService {
             log.warn("[CreateOrder] correlationId={}, Client total {} differs from server total {} - using server total",
                     correlationId, request.getTotalPrice(), total);
         }
+    }
+
+    /**
+     * Finisher / special shirts picked besides the race shirt. Each must be a style of this
+     * event with a size of that style; a RACE style sent here is ignored because the race
+     * shirt travels on shirtTypeId / shirtSizeId.
+     */
+    private void attachExtraShirts(OrderDetail orderDetail, OrderDetailRequest req, Event event) {
+        if (req.getShirts() == null || req.getShirts().isEmpty()) {
+            return;
+        }
+        if (orderDetail.getShirts() == null) {
+            orderDetail.setShirts(new ArrayList<>());
+        }
+        for (OrderDetailShirtDto dto : req.getShirts()) {
+            if (dto == null || dto.getShirtTypeId() == null) {
+                continue;
+            }
+            ShirtType type = shirtTypeRepository.findByUuid(dto.getShirtTypeId())
+                    .orElseThrow(() -> new ResourceNotFoundException("ShirtType not found: " + dto.getShirtTypeId()));
+            if (type.getEvent() == null || !Objects.equals(type.getEvent().getId(), event.getId())) {
+                throw new BusinessException("แบบเสื้อที่เลือกไม่ได้อยู่ในงานที่สมัคร");
+            }
+            String category = EventServiceImpl.normaliseShirtCategory(type.getCategory());
+            if ("RACE".equals(category)) {
+                continue;
+            }
+            ShirtSize size = null;
+            if (dto.getShirtSizeId() != null) {
+                size = shirtSizeRepository.findByUuid(dto.getShirtSizeId())
+                        .orElseThrow(() -> new ResourceNotFoundException("ShirtSize not found: " + dto.getShirtSizeId()));
+                if (size.getShirtType() == null || !Objects.equals(size.getShirtType().getId(), type.getId())) {
+                    throw new BusinessException("ไซส์เสื้อที่เลือกไม่ตรงกับแบบเสื้อ");
+                }
+            }
+            OrderDetailShirt shirt = new OrderDetailShirt();
+            shirt.setOrderDetail(orderDetail);
+            shirt.setShirtType(type);
+            shirt.setShirtSize(size);
+            shirt.setCategory(category);
+            orderDetail.getShirts().add(shirt);
+        }
+    }
+
+    /**
+     * Team distances: every member carries the team number the frontend assigned, the team has
+     * exactly the configured number of members and one team name (copied to every member's
+     * teamClub). Individual distances ignore the team number.
+     */
+    private void validateTeams(List<OrderDetail> details) {
+        Map<String, List<OrderDetail>> byTeam = new LinkedHashMap<>();
+        for (OrderDetail od : details) {
+            EventType et = od.getEventType();
+            if (et == null || !Boolean.TRUE.equals(et.getIsTeam())) {
+                od.setTeamGroup(null);
+                continue;
+            }
+            if (od.getTeamGroup() == null) {
+                throw new BusinessException("ประเภท " + et.getName() + " เป็นการสมัครแบบทีม กรุณาสมัครเป็นทีม");
+            }
+            if (od.getTeamClub() == null || od.getTeamClub().isBlank()) {
+                throw new BusinessException("กรุณาระบุชื่อทีมสำหรับประเภท " + et.getName());
+            }
+            byTeam.computeIfAbsent(et.getId() + ":" + od.getTeamGroup(), k -> new ArrayList<>()).add(od);
+        }
+        for (List<OrderDetail> members : byTeam.values()) {
+            EventType et = members.get(0).getEventType();
+            int size = et.getTeamSize() != null ? et.getTeamSize() : members.size();
+            if (members.size() != size) {
+                throw new BusinessException("ทีมของประเภท " + et.getName() + " ต้องมีสมาชิก " + size + " คน");
+            }
+            String name = members.get(0).getTeamClub().trim();
+            members.forEach(m -> m.setTeamClub(name));
+        }
+    }
+
+    /** The organizer's field configuration is enforced here too, not only by the form. */
+    private void validateRequiredFields(Event event, OrderRequest request) {
+        if (request.getOrderDetails() == null) {
+            return;
+        }
+        Map<String, String> config = RegistrationFieldConfig.resolve(event);
+        for (OrderDetailRequest r : request.getOrderDetails()) {
+            for (String field : RegistrationFieldConfig.FIELDS) {
+                if (RegistrationFieldConfig.isRequired(config, field) && isBlank(fieldValue(r, field))) {
+                    throw new BusinessException("กรุณากรอก" + fieldLabel(field) + "ให้ครบทุกคน");
+                }
+            }
+        }
+    }
+
+    private static String fieldValue(OrderDetailRequest r, String field) {
+        return switch (field) {
+            case "pictureUrl" -> r.getPictureUrl();
+            case "firstNameEn" -> r.getFirstNameEn();
+            case "lastNameEn" -> r.getLastNameEn();
+            case "idNo" -> r.getIdNo();
+            case "phone" -> r.getPhone();
+            case "province" -> r.getProvince();
+            case "nationality" -> r.getNationality();
+            case "bloodType" -> r.getBloodType();
+            case "healthIssues" -> r.getHealthIssues();
+            case "emergencyContact" -> r.getEmergencyContact();
+            case "emergencyRelation" -> r.getEmergencyRelation();
+            case "emergencyPhone" -> r.getEmergencyPhone();
+            case "teamClub" -> r.getTeamClub();
+            default -> "x";
+        };
+    }
+
+    private static String fieldLabel(String field) {
+        return switch (field) {
+            case "pictureUrl" -> "รูปถ่าย";
+            case "firstNameEn" -> "ชื่อ (ภาษาอังกฤษ)";
+            case "lastNameEn" -> "นามสกุล (ภาษาอังกฤษ)";
+            case "idNo" -> "เลขบัตรประชาชน/พาสปอร์ต";
+            case "phone" -> "เบอร์โทรศัพท์";
+            case "province" -> "จังหวัด";
+            case "nationality" -> "สัญชาติ";
+            case "bloodType" -> "หมู่เลือด";
+            case "healthIssues" -> "ข้อมูลสุขภาพ";
+            case "emergencyContact" -> "ผู้ติดต่อฉุกเฉิน";
+            case "emergencyRelation" -> "ความสัมพันธ์ผู้ติดต่อฉุกเฉิน";
+            case "emergencyPhone" -> "เบอร์โทรฉุกเฉิน";
+            case "teamClub" -> "ชื่อทีม/ชมรม";
+            default -> field;
+        };
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
     }
 
     @Override

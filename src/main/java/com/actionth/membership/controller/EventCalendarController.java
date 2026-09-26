@@ -74,6 +74,15 @@ public class EventCalendarController {
         }
     }
 
+    /** Stops the run in progress after the item it is on; rows already imported are kept. */
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/import/stop")
+    public Response<EventCalendarImportStatus> stopImport() {
+        boolean accepted = eventCalendarImportService.requestStop();
+        return new Response<>(eventCalendarImportService.getStatus(),
+                accepted ? "กำลังหยุดดึงข้อมูล จะหยุดหลังรายการที่กำลังทำอยู่" : "ไม่มีการดึงข้อมูลที่กำลังทำงานอยู่", accepted);
+    }
+
     /** Removes every imported row (manual submissions stay) so the next sync starts from scratch. */
     @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/import")

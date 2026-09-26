@@ -78,6 +78,14 @@ public class Event extends StandardFields {
      */
     private Boolean testMode;
 
+    /**
+     * Which registration-form fields this event asks for, as JSON {@code {"idNo":"REQUIRED",
+     * "bloodType":"HIDDEN", ...}} (values HIDDEN / OPTIONAL / REQUIRED). Missing keys fall back
+     * to the platform default; name, birth date, gender and email can never be turned off.
+     */
+    @Column(columnDefinition = "longtext")
+    private String fieldConfig;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "organizerId")
     @JsonBackReference("user-event")
@@ -125,6 +133,14 @@ public class Event extends StandardFields {
     @Builder.Default
     @ToString.Exclude
     private List<EventSelectionField> selectionFields = new ArrayList<>();
+
+    /** Sponsor questionnaire groups; a selection field may point at one of these. */
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @LazyCollection(LazyCollectionOption.FALSE)
+    @JsonManagedReference("event-questionSections")
+    @Builder.Default
+    @ToString.Exclude
+    private List<EventQuestionSection> questionSections = new ArrayList<>();
 
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @LazyCollection(LazyCollectionOption.FALSE)

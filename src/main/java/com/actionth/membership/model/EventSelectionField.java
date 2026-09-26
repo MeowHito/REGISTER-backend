@@ -48,6 +48,15 @@ public class EventSelectionField extends StandardFields {
 
     private boolean required;
 
+    /** Sponsor questionnaire group this question is shown under (null = plain extra question). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "sectionId")
+    @ToString.Exclude
+    private EventQuestionSection section;
+
+    /** Display order (lower first). */
+    private Integer position;
+
     @OneToMany(mappedBy = "selectionField", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     @ToString.Exclude
