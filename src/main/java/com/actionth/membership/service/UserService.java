@@ -1,6 +1,7 @@
 package com.actionth.membership.service;
 
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.data.domain.Page;
 
@@ -19,6 +20,8 @@ public interface UserService {
     /* Default */
 
     Page<UserViewDto> findAll(GeneralRequest generalRequest);
+
+    Map<String, Long> countByRoleType();
 
     User findById(Integer id);
 

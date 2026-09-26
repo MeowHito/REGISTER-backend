@@ -30,6 +30,9 @@ public interface UserRepository extends JpaRepository<User, Integer>, JpaSpecifi
     @Query("SELECT u FROM User u WHERE u.active = true AND u.role.roleType = :roleType")
     List<User> findAllActiveUsersByRoleType(@Param("roleType") String roleType);
 
+    @Query("SELECT u.role.roleType, COUNT(u) FROM User u GROUP BY u.role.roleType")
+    List<Object[]> countGroupByRoleType();
+
     @Query(value = "SELECT u.id, u.uuid, u.active, u.createdTime, u.updatedTime, " +
             "u.createdBy, u.updatedBy, u.email, u.password, u.firstName, u.lastName, " +
             "u.firstNameEn, u.lastNameEn, u.role, u.idNo, u.gender, u.birthDate, u.tel, " +

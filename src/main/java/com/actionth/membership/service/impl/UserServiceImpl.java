@@ -46,10 +46,15 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
+import javax.persistence.criteria.CriteriaBuilder;
+import javax.persistence.criteria.Expression;
 import javax.persistence.criteria.Predicate;
+import javax.persistence.criteria.Root;
 
 @Service
 @RequiredArgsConstructor
@@ -79,6 +84,17 @@ public class UserServiceImpl implements UserService {
                 predicates.add(cb.equal(root.get("active"), generalRequest.getActive()));
             }
 
+            if (paging != null && paging.getSearch() != null) {
+                paging.getSearch().stream()
+                        .filter(s -> "roleType".equals(s.getSearchField()) && s.getSearchText() != null)
+                        .forEach(s -> predicates.add(cb.equal(root.get("role").get("roleType"), s.getSearchText())));
+
+                paging.getSearch().stream()
+                        .filter(s -> "name".equals(s.getSearchField()) && s.getSearchText() != null
+                                && !s.getSearchText().isBlank())
+                        .forEach(s -> predicates.add(nameContains(root, cb, s.getSearchText())));
+            }
+
             return cb.and(predicates.toArray(new Predicate[0]));
         };
 
@@ -100,6 +116,29 @@ public class UserServiceImpl implements UserService {
             return userRepository.findAll(searchSpec, pageable)
                     .map(this::mapViewUserToDto);
         }
+    }
+
+    /** firstName / lastName (Thai or English) contains the text, or the full "first last" name does. */
+    private Predicate nameContains(Root<User> root, CriteriaBuilder cb, String text) {
+        String like = "%" + text.trim().toLowerCase() + "%";
+        List<Predicate> any = new ArrayList<>();
+        for (String[] pair : new String[][] { { "firstName", "lastName" }, { "firstNameEn", "lastNameEn" } }) {
+            Expression<String> first = cb.lower(cb.coalesce(root.get(pair[0]), ""));
+            Expression<String> last = cb.lower(cb.coalesce(root.get(pair[1]), ""));
+            any.add(cb.like(first, like));
+            any.add(cb.like(last, like));
+            any.add(cb.like(cb.concat(cb.concat(first, " "), last), like));
+        }
+        return cb.or(any.toArray(new Predicate[0]));
+    }
+
+    @Override
+    public Map<String, Long> countByRoleType() {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        for (Object[] row : userRepository.countGroupByRoleType()) {
+            counts.put((String) row[0], (Long) row[1]);
+        }
+        return counts;
     }
 
     @Override

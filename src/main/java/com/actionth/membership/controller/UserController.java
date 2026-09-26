@@ -12,9 +12,11 @@ import com.actionth.membership.response.Response;
 import com.actionth.membership.service.impl.UserServiceImpl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -27,6 +29,12 @@ public class UserController {
     @PostMapping("/getAllUsers")
     public Response<Page<UserViewDto>> getAllUsers(@RequestBody GeneralRequest generalRequest) throws JsonProcessingException {
         return new Response<>(userService.findAll(generalRequest), "User retrieved successfully", true);
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/countByRoleType")
+    public Response<Map<String, Long>> countByRoleType() {
+        return new Response<>(userService.countByRoleType(), "User counts retrieved successfully", true);
     }
 
     @PostMapping
