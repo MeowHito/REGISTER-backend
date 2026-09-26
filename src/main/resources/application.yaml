@@ -129,6 +129,13 @@ login:
 
 server:
   port: 8080
+  tomcat:
+    # List pages send `paging` as JSON in the query string and axios leaves the array
+    # brackets unescaped (…"search":[{…}]…). Tomcat rejects raw [ ] with a bare 400 before
+    # Spring runs, which the browser then reports as a CORS error.
+    relaxed-query-chars:
+      - '['
+      - ']'
 
 scb:
   app-key: ${SCB_APP_KEY}
