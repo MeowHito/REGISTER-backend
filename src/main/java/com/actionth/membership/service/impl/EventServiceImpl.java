@@ -178,6 +178,18 @@ public class EventServiceImpl implements EventService {
 					Join<Event, CountryState> countryState = root.join("province", JoinType.LEFT);
 					return cb.equal(countryState.get("uuid"), s.getSearchText());
 				}
+				if ("registrationStatus".equalsIgnoreCase(s.getSearchField())) {
+					// "open" = published and now inside the registration window (a missing bound means unbounded),
+					// the same rule getEventTypesAvailability applies; "closed" is everything else.
+					OffsetDateTime now = OffsetDateTime.now();
+					Predicate open = cb.and(
+							cb.or(cb.isNull(root.get("isDraft")), cb.isFalse(root.get("isDraft"))),
+							cb.or(cb.isNull(root.get("startRegistrationDate")),
+									cb.lessThanOrEqualTo(root.get("startRegistrationDate"), now)),
+							cb.or(cb.isNull(root.get("endRegistrationDate")),
+									cb.greaterThanOrEqualTo(root.get("endRegistrationDate"), now)));
+					return "closed".equalsIgnoreCase(s.getSearchText()) ? cb.not(open) : open;
+				}
 				return null;
 			}));
 
