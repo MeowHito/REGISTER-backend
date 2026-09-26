@@ -25,6 +25,7 @@ import com.actionth.membership.model.request.ImageDTORequest;
 import com.actionth.membership.model.request.SummaryFinanceRequestDTO;
 import com.actionth.membership.model.request.ZipDTORequest;
 import com.actionth.membership.service.AWSService;
+import com.actionth.membership.service.ContractService;
 import com.actionth.membership.service.AppConfigService;
 import com.actionth.membership.service.ReportService;
 import com.actionth.membership.service.impl.UserServiceImpl;
@@ -65,6 +66,9 @@ public class DocumentController {
     @Autowired
     UserServiceImpl userService;
 
+    @Autowired
+    private ContractService contractService;
+
     private static final List<String> ACCESS_HEADERS = Collections
             .unmodifiableList(Arrays.asList("Content-Type", "Content-Disposition"));
 
@@ -102,8 +106,9 @@ public class DocumentController {
     @PostMapping("/getContractDocument")
     public ResponseEntity<byte[]> getContractDocument(
             @RequestHeader Map<String, String> headers,
-            @RequestBody ContractDocumentDTO contract)
+            @RequestBody ContractDocumentDTO request)
             throws IllegalStateException, Exception {
+        ContractDocumentDTO contract = contractService.resolvePreview(request);
 
         HttpHeaders resHeader = new HttpHeaders();
         resHeader.setContentType(MediaType.APPLICATION_PDF);
@@ -198,6 +203,10 @@ public class DocumentController {
         ZipOutputStream zipOut = new ZipOutputStream(baos);
 
         for (ZipDTORequest.ImageDTO img : request.getImages()) {
+            // Only our own bucket: a free-form URL here would let callers read internal hosts.
+            if (!awsService.isOwnBucketUrl(img.getUrl())) {
+                continue;
+            }
             try (InputStream in = new URL(img.getUrl()).openStream()) {
                 zipOut.putNextEntry(new ZipEntry("images_" + request.getName() + "/" + img.getFilename()));
                 in.transferTo(zipOut);
@@ -286,6 +295,9 @@ public class DocumentController {
 
     @PostMapping("/downloadImage")
     public ResponseEntity<byte[]> downloadImage(@RequestBody ImageDTORequest img) throws IOException {
+        if (!awsService.isOwnBucketUrl(img.getUrl())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+        }
         try (InputStream in = new URL(img.getUrl()).openStream()) {
             byte[] imageBytes = in.readAllBytes();
 

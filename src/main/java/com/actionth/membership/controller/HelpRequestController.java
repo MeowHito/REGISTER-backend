@@ -1,5 +1,6 @@
 package com.actionth.membership.controller;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.actionth.membership.model.dto.HelpRequestDto;
 import com.actionth.membership.model.request.HelpRequestRequest;
 import com.actionth.membership.model.request.HelpRequestStatusRequest;
@@ -39,6 +40,7 @@ public class HelpRequestController {
                 .build());
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping
     public ResponseEntity<Response<Page<HelpRequestDto>>> getAll(
             @RequestParam(required = false) String status,
@@ -52,6 +54,7 @@ public class HelpRequestController {
                 .build());
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/status")
     public ResponseEntity<Response<HelpRequestDto>> updateStatus(@RequestBody HelpRequestStatusRequest request) {
         HelpRequestDto result = helpRequestService.updateStatus(request);

@@ -26,6 +26,7 @@ public class UserController {
     @Autowired
     private UserServiceImpl userService;
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/getAllUsers")
     public Response<Page<UserViewDto>> getAllUsers(@RequestBody GeneralRequest generalRequest) throws JsonProcessingException {
         return new Response<>(userService.findAll(generalRequest), "User retrieved successfully", true);
@@ -37,6 +38,7 @@ public class UserController {
         return new Response<>(userService.countByRoleType(), "User counts retrieved successfully", true);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping
     public Response<UserDto> createUser(@RequestBody UserRegisterDTORequest user) {
         return new Response<>(userService.createUser(user), "User created successfully", true);
@@ -47,6 +49,7 @@ public class UserController {
         return new Response<>(userService.updateUser(user), "User updated successfully", true);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{uuid}")
     public Response<Void> deleteUser(@PathVariable String uuid, @RequestParam(value = "mode") String mode) {
         userService.deleteUser(uuid, mode);
@@ -58,6 +61,7 @@ public class UserController {
         return new Response<>(userService.getByUuid(uuid), "Users retrieved successfully", true);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/updateRole")
     public Response<Void> updateRole(@RequestBody UseRoleDtoRequest request) {
         userService.updateRole(request);
@@ -74,6 +78,7 @@ public class UserController {
         return new Response<>(userService.resetPassword(user), "Reset password successfully", true);
     }
     
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/updateStatus")
     public Response<Void> updateStatus( @RequestBody UserProfileDTORequest user) {
         userService.updateStatus(user);

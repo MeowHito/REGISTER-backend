@@ -9,8 +9,10 @@ import org.springframework.transaction.annotation.Transactional;
 import com.actionth.membership.exception.ResourceNotFoundException;
 import com.actionth.membership.model.Event;
 import com.actionth.membership.model.EventPermission;
+import com.actionth.membership.model.EventType;
 import com.actionth.membership.model.OrderDetail;
 import com.actionth.membership.repository.EventRepository;
+import com.actionth.membership.repository.EventTypeRepository;
 import com.actionth.membership.repository.OrderDetailRepository;
 import com.actionth.membership.utils.ContextUtils;
 
@@ -29,6 +31,7 @@ public class EventAccessService {
     public enum Access { READ, UPDATE, DELETE }
 
     private final EventRepository eventRepository;
+    private final EventTypeRepository eventTypeRepository;
     private final OrderDetailRepository orderDetailRepository;
     private final ContextUtils contextUtils;
 
@@ -65,6 +68,19 @@ public class EventAccessService {
         Event event = eventRepository.findByUuid(eventUuid)
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
         assertCan(event, access);
+    }
+
+    /** For endpoints keyed by a race distance (e.g. the participant list is filtered per EventType). */
+    public void assertCanByEventTypeUuid(String eventTypeUuid, Access access) {
+        EventType eventType = eventTypeRepository.findByUuid(eventTypeUuid)
+                .orElseThrow(() -> new ResourceNotFoundException("Event type not found"));
+        if (eventType.getEvent() == null) {
+            if (isCurrentUserAdmin()) {
+                return;
+            }
+            throw new AccessDeniedException("No permission to " + access.name().toLowerCase() + " this event");
+        }
+        assertCan(eventType.getEvent(), access);
     }
 
     public void assertCanByParticipantUuid(String participantUuid, Access access) {

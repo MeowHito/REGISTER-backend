@@ -1,5 +1,6 @@
 package com.actionth.membership.controller;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.actionth.membership.model.dto.PermissionDto;
 import com.actionth.membership.response.Response;
 import com.actionth.membership.service.PermissionService;
@@ -12,6 +13,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/permission")
+@PreAuthorize("hasRole('ADMIN')")
 @RequiredArgsConstructor
 public class PermissionController {
 

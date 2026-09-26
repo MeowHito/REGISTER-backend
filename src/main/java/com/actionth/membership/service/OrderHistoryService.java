@@ -7,6 +7,8 @@ import javax.persistence.criteria.Root;
 import javax.persistence.criteria.Subquery;
 import javax.transaction.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -28,6 +30,8 @@ import com.actionth.membership.model.Orders;
 import com.actionth.membership.model.PagingData;
 import com.actionth.membership.model.User;
 import com.actionth.membership.exception.ResourceNotFoundException;
+import com.actionth.membership.exception.ValidationException;
+import org.springframework.security.access.AccessDeniedException;
 import com.actionth.membership.model.dto.OrderDetailFullResponse;
 import com.actionth.membership.model.dto.OrderDetailResponse;
 import com.actionth.membership.model.dto.OrderHistoryResponse;
@@ -51,6 +55,11 @@ public class OrderHistoryService {
     private final ModelMapper modelMapper;
     private final ContextUtils contextUtils;
     private final UserService userService;
+    private final EventAccessService eventAccessService;
+
+    private boolean isOwner(Orders order, Integer userId) {
+        return userId != null && order.getCreatedBy() != null && userId.equals(order.getCreatedBy().getId());
+    }
 
     public Page<OrderHistoryResponse> search(String q, String status,
             OffsetDateTime start, OffsetDateTime end, PagingData pagingData) {
@@ -159,13 +168,28 @@ public class OrderHistoryService {
     }
 
     @Transactional
-    public void cancelOrder(String orderId, String cancelledBy) {
+    public void cancelOrder(String orderId) {
         Orders order = orderRepository.findByUuid(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
 
+        // The buyer, an admin, or someone who may edit the event can cancel — and only an unpaid
+        // order: a paid one goes through the refund / review flow, never a one-click cancel.
+        Integer userId = contextUtils.getCurrentUserIdOrNull();
+        boolean owner = isOwner(order, userId);
+        boolean admin = eventAccessService.isCurrentUserAdmin();
+        if (!owner && !admin) {
+            if (order.getEvent() == null) {
+                throw new AccessDeniedException("No permission to cancel this order");
+            }
+            eventAccessService.assertCan(order.getEvent(), EventAccessService.Access.UPDATE);
+        }
+        if (!PaymentStatus.PENDING.getJson().equalsIgnoreCase(order.getPaymentStatus())) {
+            throw new ValidationException("ยกเลิกได้เฉพาะคำสั่งซื้อที่รอชำระเงินเท่านั้น");
+        }
+
         order.setPaymentStatus(PaymentStatus.CANCELLED.getJson());
         order.setCancelledDateTime(OffsetDateTime.now());
-        order.setCancelledBy(cancelledBy);
+        order.setCancelledBy(owner ? "USER" : admin ? "ADMIN" : "ORGANIZER");
 
         orderRepository.save(order);
 
@@ -182,9 +206,25 @@ public class OrderHistoryService {
         }
     }
 
-    public OrderDetailFullResponse getOrderWithDetails(String orderId) {
+    public OrderDetailFullResponse getOrderWithDetails(String orderId, String token) {
         Orders order = orderRepository.findByUuidOrOrderNo(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
+
+        // Order numbers are sequential, so knowing one proves nothing. Full access (including the
+        // payment token) needs the pay-later token from the email, the buyer's own session or an
+        // admin; an organizer of the event gets a read-only view without the token.
+        boolean viaToken = token != null && !token.isBlank() && order.getPaymentToken() != null
+                && MessageDigest.isEqual(token.getBytes(StandardCharsets.UTF_8),
+                        order.getPaymentToken().getBytes(StandardCharsets.UTF_8));
+        boolean fullAccess = viaToken || eventAccessService.isCurrentUserAdmin()
+                || isOwner(order, contextUtils.getCurrentUserIdOrNull());
+        if (!fullAccess) {
+            if (contextUtils.getCurrentUserIdOrNull() == null || order.getEvent() == null) {
+                // Same answer as a missing order, so the endpoint can't be used to probe order numbers.
+                throw new ResourceNotFoundException("Order not found");
+            }
+            eventAccessService.assertCan(order.getEvent(), EventAccessService.Access.READ);
+        }
 
         List<OrderDetail> orderDetails = order.getOrderDetails();
 
@@ -211,7 +251,7 @@ public class OrderHistoryService {
         response.setEventLink(order.getEvent() != null ? order.getEvent().getLink() : null);
         response.setEventDate(order.getEvent() != null ? order.getEvent().getEventDate() : null);
         response.setDetails(detailDtos);
-        response.setPaymentToken(order.getPaymentToken());
+        response.setPaymentToken(fullAccess ? order.getPaymentToken() : null);
         response.setUuid(order.getUuid());
         response.setPaymentDueDatetime(order.getPaymentDueDatetime());
         response.setPaymentMethod(order.getPaymentMethod());

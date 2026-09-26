@@ -1,5 +1,6 @@
 package com.actionth.membership.controller;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.actionth.membership.model.PagingData;
 import com.actionth.membership.model.request.CouponDTO;
 import com.actionth.membership.model.request.CouponDTORequest;
@@ -88,18 +89,21 @@ public class CouponController {
         return new Response<>(null, "Coupon updated successfully", true);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/updateCouponStatus")
     public Response<Void> updateCouponStatus(@RequestBody CouponDTO couponDTO) {
         couponService.updateCouponStatus(couponDTO);
         return new Response<>(null, "Coupon updated successfully", true);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping
     public Response<Void> deleteCoupon(@RequestBody List<String> ids) {
         couponService.deleteByUuids(ids);
         return new Response<>(null, "Coupon deleted successfully", true);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{bucketName}")
     public Response<Void> deleteByBucketName(@PathVariable String bucketName) {
         couponService.deleteByBucketName(bucketName);

@@ -60,7 +60,8 @@ public class ParticipantController {
     public Response<Page<ParticipantDTO>> getParticipantsWithPagination(
             @RequestParam("id") String id,
             @RequestParam(value = "paging", required = false) String pagingJson) throws JsonProcessingException {
-        eventAccessService.assertCanByEventUuid(id, Access.READ);
+        // The list is filtered per race distance, so `id` is an EventType uuid, not the event's.
+        eventAccessService.assertCanByEventTypeUuid(id, Access.READ);
         PagingData paging = null;
         if (pagingJson != null) {
             paging = mapper.readValue(pagingJson, PagingData.class);

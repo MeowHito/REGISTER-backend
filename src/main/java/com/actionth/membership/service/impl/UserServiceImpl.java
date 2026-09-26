@@ -221,6 +221,11 @@ public class UserServiceImpl implements UserService {
     public UserDto updateUser(UserProfileDTORequest userDto) {
         User user = userRepository.findByUuid(userDto.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        User actor = getCurrentUserSession();
+        if (actor == null || (!"admin".equalsIgnoreCase(actor.getRole().getRoleType())
+                && !user.getUuid().equals(actor.getUuid()))) {
+            throw new ValidationException("ท่านไม่มีสิทธิ์ในการแก้ไขข้อมูลผู้ใช้นี้");
+        }
 
         user.setFirstName(userDto.getFirstName());
         user.setLastName(userDto.getLastName());

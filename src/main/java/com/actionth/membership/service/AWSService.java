@@ -67,6 +67,36 @@ public class AWSService {
                 bucketName, S3_REGION.getName(), encodedPath);
     }
 
+    /**
+     * True only for an https URL that points into this app's own bucket, in either the
+     * virtual-hosted (bucket.s3[.region].amazonaws.com) or path-style (s3[.region].amazonaws.com/bucket/...)
+     * form. Anything that fetches a client-supplied URL on the server must check this first, or it
+     * can be pointed at the EC2 metadata service, internal hosts or file:// paths.
+     */
+    public boolean isOwnBucketUrl(String value) {
+        if (value == null || bucketName == null || bucketName.isBlank()) {
+            return false;
+        }
+        try {
+            java.net.URI uri = new java.net.URI(value.trim());
+            if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null || uri.getUserInfo() != null
+                    || (uri.getPort() != -1 && uri.getPort() != 443)) {
+                return false;
+            }
+            String host = uri.getHost().toLowerCase();
+            String bucket = bucketName.toLowerCase();
+            String region = S3_REGION.getName();
+            if (host.equals(bucket + ".s3." + region + ".amazonaws.com") || host.equals(bucket + ".s3.amazonaws.com")) {
+                return true;
+            }
+            String path = uri.getPath() == null ? "" : uri.getPath();
+            return (host.equals("s3." + region + ".amazonaws.com") || host.equals("s3.amazonaws.com"))
+                    && path.startsWith("/" + bucketName + "/");
+        } catch (java.net.URISyntaxException e) {
+            return false;
+        }
+    }
+
     private boolean isAbsoluteUrl(String value) {
         if (value == null) {
             return false;

@@ -1,5 +1,6 @@
 package com.actionth.membership.controller;
 
+import com.actionth.membership.exception.ValidationException;
 import com.actionth.membership.exception.ResourceNotFoundException;
 import com.actionth.membership.exception.BusinessException;
 import com.actionth.membership.model.Contact;
@@ -172,6 +173,9 @@ public class PublicAPIController {
     @PostMapping("/register")
     public Response<Object> createUser(@RequestBody UserRegisterDTORequest userDto,
             HttpServletResponse servletResponse) {
+        if (!"guest".equalsIgnoreCase(userDto.getRole()) && !"organizer".equalsIgnoreCase(userDto.getRole())) {
+            throw new ValidationException("ไม่สามารถสมัครด้วยสิทธิ์นี้ได้");
+        }
         UserDto user = userService.createUser(userDto);
 
         // Organizers register in a pending state and must be approved (activated) by an

@@ -1,5 +1,6 @@
 package com.actionth.membership.controller;
 
+import com.actionth.membership.service.EventAccessService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
@@ -26,10 +27,14 @@ public class EventPermissionController {
     @Autowired
     private ObjectMapper mapper;
 
+    @Autowired
+    private EventAccessService eventAccessService;
+
     @GetMapping
     public Response<Page<EventPermissionDto>> getEventPermissionsByEvent(
             @RequestParam("id") String id,
             @RequestParam(value = "paging", required = false) String pagingJson) throws JsonProcessingException {
+        eventAccessService.assertCanByEventUuid(id, EventAccessService.Access.READ);
         PagingData paging = null;
         if (pagingJson != null) {
             paging = mapper.readValue(pagingJson, PagingData.class);

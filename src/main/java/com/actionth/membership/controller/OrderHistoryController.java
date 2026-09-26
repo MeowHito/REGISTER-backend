@@ -50,13 +50,15 @@ public class OrderHistoryController {
     }
 
     @GetMapping("/detail")
-    public OrderDetailFullResponse getOrderDetail(@RequestParam String orderId) {
-        return orderHistoryService.getOrderWithDetails(orderId);
+    public OrderDetailFullResponse getOrderDetail(@RequestParam String orderId,
+            @RequestParam(required = false) String token) {
+        return orderHistoryService.getOrderWithDetails(orderId, token);
     }
 
     @PostMapping("/cancel")
     public ResponseEntity<String> cancelOrder(@RequestBody OrderCancelRequest request) {
-        orderHistoryService.cancelOrder(request.getOrderId(), request.getCancelledBy());
+        // cancelledBy is decided on the server from who is calling, never taken from the body.
+        orderHistoryService.cancelOrder(request.getOrderId());
         return ResponseEntity.ok("Order cancelled successfully");
     }
 

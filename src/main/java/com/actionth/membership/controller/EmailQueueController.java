@@ -1,5 +1,6 @@
 package com.actionth.membership.controller;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.actionth.membership.model.dto.EmailQueueDashboardDto;
 import com.actionth.membership.model.dto.EmailQueueDto;
 import com.actionth.membership.response.Response;
@@ -19,6 +20,7 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 @RestController
 @RequestMapping("/api/email-queue")
+@PreAuthorize("hasRole('ADMIN')")
 @RequiredArgsConstructor
 public class EmailQueueController {
 

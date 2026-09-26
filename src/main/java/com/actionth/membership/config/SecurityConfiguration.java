@@ -60,7 +60,6 @@ public class SecurityConfiguration {
 			"/actuator/health",
 			"/api/order/validate-token/**",
 			"/api/orderHistory/detail/**",
-			"/api/coupon/getCoupons/**",
 			"/api/coupon/validateCoupon",
 			"/api/order/update",
 			"/api/gatewaypayment/ewallet-qrcode",

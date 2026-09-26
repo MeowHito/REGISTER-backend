@@ -31,6 +31,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @RestController
 @RequestMapping("/api/email-logs")
+@PreAuthorize("hasRole('ADMIN')")
 public class EmailLogController {
 
     @Autowired

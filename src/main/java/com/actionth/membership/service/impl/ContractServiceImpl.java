@@ -1,5 +1,7 @@
 package com.actionth.membership.service.impl;
 
+import com.actionth.membership.model.dto.ContractDocumentDTO;
+import org.springframework.security.access.AccessDeniedException;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -89,6 +91,26 @@ public class ContractServiceImpl implements ContractService {
             .withChronology(IsoChronology.INSTANCE);
     private static final ZoneId BANGKOK = ZoneId.of("Asia/Bangkok");
 
+    private boolean isAdmin(User user) {
+        return user != null && user.getRole() != null && "admin".equalsIgnoreCase(user.getRole().getRoleType());
+    }
+
+    /**
+     * A contract is between Action and the event's organizer, so only that organizer (or an admin)
+     * may see or touch it — collaborators on the event are not a party to it.
+     */
+    private void assertContractAccess(Event event) {
+        User user = userService.getCurrentUserSession();
+        if (isAdmin(user)) {
+            return;
+        }
+        boolean isOrganizer = user != null && event != null && event.getOrganizer() != null
+                && Objects.equals(event.getOrganizer().getId(), user.getId());
+        if (!isOrganizer) {
+            throw new AccessDeniedException("No permission to access this contract");
+        }
+    }
+
     @Override
     public Page<ContractDTORequest> findAll(PagingData pagingData) {
         User user = userService.getCurrentUserSession();
@@ -115,12 +137,9 @@ public class ContractServiceImpl implements ContractService {
 
             predicates.add(criteriaBuilder.equal(root.get("active"), true));
 
-            if (user != null && user.getRole() != null) {
-                String role = user.getRole().getRole();
-                if ("organizer".equals(role)) {
-                    predicates.add(criteriaBuilder.equal(organizer.get("id"), user.getId()));
-                    predicates.add(criteriaBuilder.equal(root.get("isReadyForSign"), true));
-                }
+            if (!isAdmin(user)) {
+                predicates.add(criteriaBuilder.equal(organizer.get("id"), user.getId()));
+                predicates.add(criteriaBuilder.equal(root.get("isReadyForSign"), true));
             }
 
             return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
@@ -144,6 +163,7 @@ public class ContractServiceImpl implements ContractService {
     public ContractDTORequest findByUuid(String uuid) {
         Contract contract = contractRepository.findByUuid(uuid)
                 .orElseThrow(() -> new ResourceNotFoundException("Contract not found"));
+        assertContractAccess(contract.getEvent());
         ContractDTORequest dto = modelMapper.map(contract, ContractDTORequest.class);
         dto.setId(contract.getUuid());
         dto.setEventId(contract.getEvent().getUuid());
@@ -217,6 +237,7 @@ public class ContractServiceImpl implements ContractService {
 
         Event event = eventRepository.findByUuid(contractDTO.getEventId())
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+        assertContractAccess(event);
 
         String runNo = generateRunNo();
 
@@ -274,10 +295,12 @@ public class ContractServiceImpl implements ContractService {
 
         Contract contract = contractRepository.findByUuid(contractDTO.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Contract not found"));
+        assertContractAccess(contract.getEvent());
 
         mapContractDetails(contractDTO, contract);
 
-        if (contractDTO.getEventId() != null) {
+        // Moving a contract to another event is an admin decision.
+        if (contractDTO.getEventId() != null && isAdmin(userService.getCurrentUserSession())) {
             Event event = eventRepository.findByUuid(contractDTO.getEventId())
                     .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
             contract.setEvent(event);
@@ -325,6 +348,7 @@ public class ContractServiceImpl implements ContractService {
 
         Contract contract = contractRepository.findByUuid(contractDTO.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Contract not found"));
+        assertContractAccess(contract.getEvent());
 
         contract.setPrefixPath(contractDTO.getPrefixPath());
         contract.setContractPath(contractDTO.getContractPath());
@@ -346,6 +370,7 @@ public class ContractServiceImpl implements ContractService {
 
         Contract contract = contractRepository.findByUuid(contractDTO.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Contract not found"));
+        assertContractAccess(contract.getEvent());
 
         boolean alreadySigned = (contract.getCustomerSignature() != null && !contract.getCustomerSignature().isEmpty())
                 || Boolean.TRUE.equals(contract.getIsUploadContract());
@@ -441,7 +466,7 @@ public class ContractServiceImpl implements ContractService {
             return "";
         }
         if (key.startsWith("http://") || key.startsWith("https://")) {
-            return key;
+            return awsService.isOwnBucketUrl(key) ? key : "";
         }
         try {
             String url = awsService.getPublicUrl(prefix, key);
@@ -517,6 +542,51 @@ public class ContractServiceImpl implements ContractService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    /**
+     * The preview PDF carries Action's seal and the approver's signature, so it must never be
+     * rendered from whatever the client sends. The contract has to exist and be the caller's; an
+     * admin may preview the draft terms they are editing, anyone else gets the stored terms and can
+     * only supply their own name, position and signature (from our bucket).
+     */
+    @Override
+    public ContractDocumentDTO resolvePreview(ContractDocumentDTO request) {
+        if (request.getId() == null || request.getId().isBlank()) {
+            throw new ValidationException("ไม่พบสัญญาที่ต้องการดูตัวอย่าง");
+        }
+        Contract contract = contractRepository.findByUuid(request.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Contract not found"));
+        assertContractAccess(contract.getEvent());
+
+        if (!isAdmin(userService.getCurrentUserSession())) {
+            request.setRunNo(contract.getRunNo());
+            request.setContractDate(formatContractDate(contract.getContractDate()));
+            request.setDetail(contract.getDetail());
+            request.setCustomerCompany(contract.getOrganizerName());
+            request.setOrganizer(contract.getOrganizerName());
+            request.setTel(contract.getTel());
+            request.setAddress(buildFullAddress(contract));
+            request.setTaxNo(contract.getTaxNo());
+            request.setEvent(contract.getEvent() != null ? contract.getEvent().getName() : null);
+            request.setProviderName(contract.getProviderName());
+            request.setProviderPosition(contract.getProviderPosition());
+        }
+        // Image parameters are loaded by the report engine, so an arbitrary path or URL here would
+        // read local files or internal hosts into the PDF.
+        request.setCustomerSeal(null);
+        request.setProviderSeal(null);
+        request.setProviderSignature(null);
+        String signature = request.getCustomerSignature();
+        if (signature != null && isAbsolute(signature) && !awsService.isOwnBucketUrl(signature)) {
+            request.setCustomerSignature(null);
+        }
+        return request;
+    }
+
+    private boolean isAbsolute(String value) {
+        String v = value.trim().toLowerCase();
+        return v.contains(":") || v.startsWith("/") || v.contains("..");
+    }
+
     @Override
     public void markReadyForSign(String uuid, boolean ready) {
         User currentUser = userService.getCurrentUserSession();
@@ -542,10 +612,12 @@ public class ContractServiceImpl implements ContractService {
         if ("hard".equals(mode)) {
             Contract entity = contractRepository.findByUuid(uuid)
                     .orElseThrow(() -> new RuntimeException("Contract not found"));
+            assertContractAccess(entity.getEvent());
             contractRepository.delete(entity);
         } else if ("soft".equals(mode)) {
             Contract entity = contractRepository.findByUuid(uuid)
                     .orElseThrow(() -> new RuntimeException("Contract not found"));
+            assertContractAccess(entity.getEvent());
             entity.setActive(false);
             contractRepository.save(entity);
         }

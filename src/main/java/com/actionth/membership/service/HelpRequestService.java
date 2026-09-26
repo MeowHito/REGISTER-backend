@@ -1,5 +1,7 @@
 package com.actionth.membership.service;
 
+import com.actionth.membership.utils.ContextUtils;
+import org.springframework.security.access.AccessDeniedException;
 import com.actionth.membership.constant.NotificationType;
 import com.actionth.membership.exception.ResourceNotFoundException;
 import com.actionth.membership.model.HelpRequest;
@@ -30,10 +32,22 @@ public class HelpRequestService {
     private final OrderRepository orderRepository;
     private final EmailService emailService;
     private final NotificationService notificationService;
+    private final EventAccessService eventAccessService;
+    private final ContextUtils contextUtils;
+
+    private boolean isBuyerOrAdmin(Orders order) {
+        Integer userId = contextUtils.getCurrentUserIdOrNull();
+        return eventAccessService.isCurrentUserAdmin()
+                || (userId != null && order.getCreatedBy() != null && userId.equals(order.getCreatedBy().getId()));
+    }
 
     public HelpRequestDto createHelpRequest(HelpRequestRequest request) {
         Orders order = orderRepository.findByUuid(request.getOrderUuid())
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found: " + request.getOrderUuid()));
+        // Only the buyer asks for help on their order (it emails them and pings admins).
+        if (!isBuyerOrAdmin(order)) {
+            throw new AccessDeniedException("No permission to request help for this order");
+        }
 
         HelpRequest help = new HelpRequest();
         help.setUuid(UUID.randomUUID().toString());
@@ -71,6 +85,12 @@ public class HelpRequestService {
     public List<HelpRequestDto> getHelpRequestsByOrder(String orderUuid) {
         Orders order = orderRepository.findByUuid(orderUuid)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found: " + orderUuid));
+        if (!isBuyerOrAdmin(order)) {
+            if (order.getEvent() == null) {
+                throw new AccessDeniedException("No permission to read this order");
+            }
+            eventAccessService.assertCan(order.getEvent(), EventAccessService.Access.READ);
+        }
 
         return helpRequestRepository.findByOrderUuidAndActiveTrue(orderUuid).stream()
                 .map(h -> toDto(h, order))

@@ -7,6 +7,8 @@ import lombok.Data;
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ContractDocumentDTO {
+    /** uuid of the contract being previewed; required, the server loads and checks it. */
+    private String id;
     private String runNo;
     private String contractDate;
     private String detail;

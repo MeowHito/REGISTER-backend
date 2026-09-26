@@ -66,10 +66,12 @@ public interface CouponRepository extends JpaRepository<Coupon, Integer>, JpaSpe
 
     @Query("""
                 SELECT c FROM Coupon c
-                WHERE c.event.uuid IN :eventIds
-                AND c.type IN :types
-                AND c.status = :status
-                GROUP BY c.bucketName
+                WHERE c.id IN (
+                    SELECT MIN(c2.id) FROM Coupon c2
+                    WHERE c2.event.uuid IN :eventIds
+                    AND c2.type IN :types
+                    AND c2.status = :status
+                    GROUP BY c2.bucketName)
             """)
     List<Coupon> findGroupedByBucketNameByEventIdsAndTypeAndStatus(
             @Param("eventIds") List<String> eventIds,

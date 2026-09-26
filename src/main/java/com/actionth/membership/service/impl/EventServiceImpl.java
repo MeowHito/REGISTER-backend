@@ -28,6 +28,7 @@ import javax.persistence.criteria.Root;
 import javax.persistence.criteria.Join;
 import javax.persistence.criteria.JoinType;
 import javax.persistence.criteria.Predicate;
+import javax.persistence.criteria.Subquery;
 import javax.transaction.Transactional;
 
 import org.modelmapper.ModelMapper;
@@ -165,12 +166,19 @@ public class EventServiceImpl implements EventService {
 				predicates.add(cb.equal(root.get("active"), generalRequest.getActive()));
 			}
 			if (generalRequest.getCreatedBy() != null) {
-				Join<Event, EventPermission> ep = root.join("eventPermissions", JoinType.LEFT);
-				ep.on(cb.or(
+				// Same rule as EventAccessService READ: the event's organizer, or an
+				// active collaborator row that grants read.
+				Integer userId = generalRequest.getCreatedBy();
+				Predicate isOwner = cb.equal(root.get("organizer").get("id"), userId);
+				Subquery<Integer> sq = query.subquery(Integer.class);
+				Root<EventPermission> ep = sq.from(EventPermission.class);
+				sq.select(cb.literal(1));
+				sq.where(
+						cb.equal(ep.get("event"), root),
+						cb.equal(ep.get("user").get("id"), userId),
 						cb.isTrue(ep.get("canRead")),
-						cb.isTrue(ep.get("canUpdate")),
-						cb.isTrue(ep.get("canDelete"))));
-				predicates.add(cb.equal(ep.get("user").get("id"), generalRequest.getCreatedBy()));
+						cb.isTrue(ep.get("active")));
+				predicates.add(cb.or(isOwner, cb.exists(sq)));
 			}
 
 			predicates.addAll(SearchPredicateBuilder.build(cb, root, paging, s -> {
@@ -267,6 +275,11 @@ public class EventServiceImpl implements EventService {
 
 	@Override
 	public EventDto createEvent(EventDto dto) {
+		// Only an admin may create an event on someone else's behalf; an organizer
+		// always owns what they create.
+		if (!isCurrentUserAdmin()) {
+			dto.setOrganizerId(null);
+		}
 		Event entity = new Event();
 		applyDtoToEntity(dto, entity, false);
 		entity.setIsDraft(true);
@@ -330,7 +343,15 @@ public class EventServiceImpl implements EventService {
 
 		validateEventModification(entity, dto);
 
+		// Ownership decides who sees the event, so only an admin may hand it to
+		// another organizer; a collaborator could otherwise take it over.
+		User previousOrganizer = entity.getOrganizer();
+		if (!isCurrentUserAdmin()) {
+			dto.setOrganizerId(previousOrganizer != null ? previousOrganizer.getUuid() : null);
+		}
+
 		applyDtoToEntity(dto, entity, true);
+		moveOwnerPermission(entity, previousOrganizer);
 		Event updated = eventRepository.save(entity);
 		return mapEventToDto(updated);
 	}
@@ -575,6 +596,36 @@ public class EventServiceImpl implements EventService {
 		eventAccessService.assertCan(event, deleting ? EventAccessService.Access.DELETE : EventAccessService.Access.UPDATE);
 	}
 
+	/**
+	 * When an admin hands an event to another organizer, the "owner" collaborator
+	 * row follows: the previous organizer loses it and the new one gets it.
+	 */
+	private void moveOwnerPermission(Event entity, User previousOrganizer) {
+		User organizer = entity.getOrganizer();
+		if (organizer == null || (previousOrganizer != null
+				&& Objects.equals(previousOrganizer.getId(), organizer.getId()))) {
+			return;
+		}
+		if (previousOrganizer != null) {
+			entity.getEventPermissions().removeIf(p -> p.getUser() != null
+					&& Objects.equals(p.getUser().getId(), previousOrganizer.getId())
+					&& "owner".equals(p.getRole()));
+		}
+		EventPermission owner = entity.getEventPermissions().stream()
+				.filter(p -> p.getUser() != null && Objects.equals(p.getUser().getId(), organizer.getId()))
+				.findFirst()
+				.orElseGet(() -> {
+					EventPermission p = new EventPermission();
+					p.setEvent(entity);
+					p.setUser(organizer);
+					entity.getEventPermissions().add(p);
+					return p;
+				});
+		owner.setRole("owner");
+		owner.setActive(true);
+		owner.syncBooleanFlags();
+	}
+
 	private boolean isCurrentUserAdmin() {
 		Authentication auth = SecurityContextHolder.getContext().getAuthentication();
 		return auth != null && auth.getAuthorities().stream()
@@ -652,12 +703,14 @@ public class EventServiceImpl implements EventService {
 			entity.setProvince(null);
 		}
 
-		// Organizer (nullable)
+		// Organizer (nullable). On update a missing organizerId keeps the owner.
 		if (dto.getOrganizerId() != null) {
 			User organizer = userRepository.findByUuid(dto.getOrganizerId())
 					.orElseThrow(() -> new ResourceNotFoundException(
 							"Organizer not found: " + dto.getOrganizerId()));
 			entity.setOrganizer(organizer);
+		} else if (isUpdate && entity.getOrganizer() != null) {
+			// keep the current organizer
 		} else if (contextUtils.getCurrentUserIdOrNull() != null) {
 			User organizer = userRepository.findById(contextUtils.getCurrentUserIdOrNull())
 					.orElseThrow(() -> new ResourceNotFoundException(
@@ -907,10 +960,20 @@ public class EventServiceImpl implements EventService {
 		eventMapper.setOrganizerId(ownerUuid);
 		if (createdBy != null) {
 			EventPermission myPermission = event.getEventPermissions().stream()
-					.filter(p -> p.getUser() != null && Objects.equals(p.getUser().getId(), createdBy))
+					.filter(p -> p.getUser() != null && Objects.equals(p.getUser().getId(), createdBy)
+							&& !Boolean.FALSE.equals(p.getActive()))
 					.findFirst()
 					.orElse(null);
-			if (myPermission != null) {
+			boolean isOwner = Objects.equals(event.getOrganizer().getId(), createdBy);
+			if (isOwner) {
+				// Mirrors EventAccessService: ownership grants read/update, delete needs the flag.
+				eventMapper.setPermission(EventPermissionSummaryDto.builder()
+						.role("owner")
+						.canRead(true)
+						.canUpdate(true)
+						.canDelete(myPermission != null && Boolean.TRUE.equals(myPermission.getCanDelete()))
+						.build());
+			} else if (myPermission != null) {
 				String role;
 				if (myPermission.getUser().getUuid().equals(ownerUuid)) {
 					role = "owner";

@@ -45,6 +45,8 @@ import com.actionth.membership.model.request.CouponDTO;
 import com.actionth.membership.repository.CouponRepository;
 import com.actionth.membership.repository.EventRepository;
 import com.actionth.membership.service.CouponService;
+import com.actionth.membership.service.EventAccessService;
+import com.actionth.membership.service.EventAccessService.Access;
 import com.actionth.membership.service.ParticipantService;
 import com.actionth.membership.service.UserService;
 import com.actionth.membership.utils.CouponCodeGenerator;
@@ -67,6 +69,15 @@ public class CouponServiceImpl implements CouponService {
     private final UserService userService;
 
     private final CouponCodeGenerator couponCodeGenerator;
+
+    private final EventAccessService eventAccessService;
+
+    /** A coupon bucket belongs to one event; the caller needs that access on it. */
+    private void assertBucketAccess(String bucketName, Access access) {
+        Coupon coupon = couponRepository.findFirstByBucketName(bucketName)
+                .orElseThrow(() -> new ResourceNotFoundException("Coupon not found"));
+        eventAccessService.assertCan(coupon.getEvent(), access);
+    }
 
     @Override
     public Page<CouponDTO> findAll(PagingData pagingData) {
@@ -96,7 +107,7 @@ public class CouponServiceImpl implements CouponService {
 
             List<Predicate> predicates = new ArrayList<>();
 
-            if (!isAdmin && "organizer".equalsIgnoreCase(user.getRole().getRoleType())) {
+            if (!isAdmin) {
                 Subquery<Integer> permSub = query.subquery(Integer.class);
                 Root<EventPermission> epRoot = permSub.from(EventPermission.class);
                 permSub.select(epRoot.get("event").get("id"));
@@ -152,6 +163,7 @@ public class CouponServiceImpl implements CouponService {
 
     @Override
     public Page<CouponDTO> findByBucketName(String bucketName, PagingData pagingData) {
+        assertBucketAccess(bucketName, Access.READ);
         Sort sort = Sort.by(Sort.Direction.DESC, "id");
 
         if (pagingData != null && pagingData.getSortField() != null && pagingData.getSortDirection() != null) {
@@ -227,6 +239,7 @@ public class CouponServiceImpl implements CouponService {
     public CouponDTO findFirstByBucketName(String bucketName) {
         Coupon coupon = couponRepository.findFirstByBucketName(bucketName)
                 .orElseThrow(() -> new ResourceNotFoundException("Coupon not found"));
+        eventAccessService.assertCan(coupon.getEvent(), Access.READ);
         CouponDTO dto = modelMapper.map(coupon, CouponDTO.class);
         dto.setId(coupon.getUuid());
         dto.setEventId(coupon.getEvent().getUuid());
@@ -283,6 +296,7 @@ public class CouponServiceImpl implements CouponService {
 
         Event event = eventRepository.findByUuid(couponDTO.getEventId())
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+        eventAccessService.assertCan(event, Access.UPDATE);
         if (CouponType.INTERNAL.getDescription().equals(couponDTO.getType())) {
             if (couponDTO.getOldEventId() == null) {
                 throw new ValidationException("Old event id is required.");
@@ -292,6 +306,8 @@ public class CouponServiceImpl implements CouponService {
             Event oldEvent = eventRepository.findByUuid(oldEventId)
                     .orElseThrow(() -> new ValidationException(
                             "Event not found for UUID: " + oldEventId));
+            // The runner list comes from the old event, so it must be one the caller can read.
+            eventAccessService.assertCan(oldEvent, Access.READ);
             List<String> runnerIds = participantService.getParticipantByEventId(oldEventId);
             for (String runnerId : runnerIds) {
                 Coupon coupon = modelMapper.map(couponDTO, Coupon.class);
@@ -350,6 +366,7 @@ public class CouponServiceImpl implements CouponService {
         if (coupons.isEmpty()) {
             throw new ValidationException("No coupon found.");
         }
+        eventAccessService.assertCan(coupons.get(0).getEvent(), Access.UPDATE);
 
         if (!coupons.get(0).getType().equals(couponDTO.getType())) {
             throw new ValidationException("Mismatch coupon type.");
@@ -410,8 +427,8 @@ public class CouponServiceImpl implements CouponService {
 
         Integer diffSize = couponDTO.getLimitCoupon() - coupons.size();
         if (diffSize > 0) {
-            Event event = eventRepository.findByUuid(couponDTO.getEventId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+            // New codes join the bucket's own event, never one named by the client.
+            Event event = coupons.get(0).getEvent();
             addNewCoupons(coupons, couponDTO, diffSize, event);
         } else {
             removeExistingCoupons(coupons, diffSize);
@@ -483,10 +500,18 @@ public class CouponServiceImpl implements CouponService {
         List<Coupon> coupons = couponRepository.findGroupedByBucketNameByEventIdsAndTypeAndStatus(
                 eventIds, types, status);
 
+        // Registrants only need what the coupon picker shows; bucket names, limits and redemption
+        // data stay in the back office.
         return coupons.stream().map(coupon -> {
-            CouponDTO dto = modelMapper.map(coupon, CouponDTO.class);
+            CouponDTO dto = new CouponDTO();
             dto.setId(coupon.getUuid());
             dto.setEventId(coupon.getEvent().getUuid());
+            dto.setCouponName(coupon.getCouponName());
+            dto.setCouponCode(coupon.getCouponCode());
+            dto.setDeductionPercentage(coupon.getDeductionPercentage());
+            dto.setType(coupon.getType());
+            dto.setStartTime(coupon.getStartTime());
+            dto.setExpiryTime(coupon.getExpiryTime());
             return dto;
         }).toList();
     }
@@ -578,6 +603,7 @@ public class CouponServiceImpl implements CouponService {
         if (coupons.isEmpty()) {
             throw new ResourceNotFoundException("No coupons found for bucket: " + bucketName);
         }
+        eventAccessService.assertCan(coupons.get(0).getEvent(), Access.READ);
 
         List<CouponDownloadDTO> dtos = coupons.stream()
                 .map(c -> {

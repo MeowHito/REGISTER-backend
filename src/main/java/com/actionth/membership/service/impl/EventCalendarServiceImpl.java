@@ -27,7 +27,10 @@ import com.actionth.membership.model.request.EventCalendarDTO;
 import com.actionth.membership.model.request.GeneralRequest;
 import com.actionth.membership.repository.EventCalendarRepository;
 import com.actionth.membership.repository.EventRepository;
+import com.actionth.membership.service.EventAccessService;
 import com.actionth.membership.service.EventCalendarService;
+import com.actionth.membership.utils.ContextUtils;
+import org.springframework.security.access.AccessDeniedException;
 import com.actionth.membership.utils.SearchPredicateBuilder;
 
 import lombok.RequiredArgsConstructor;
@@ -40,6 +43,19 @@ public class EventCalendarServiceImpl implements EventCalendarService {
     private final EventCalendarRepository eventCalendarRepository;
     private final NotificationService notificationService;
     private final ModelMapper modelMapper;
+    private final EventAccessService eventAccessService;
+    private final ContextUtils contextUtils;
+
+    /** A non-admin only sees and edits the calendar entries they submitted themselves. */
+    private void assertOwnEntry(EventCalendar entry) {
+        if (eventAccessService.isCurrentUserAdmin()) {
+            return;
+        }
+        Integer userId = contextUtils.getCurrentUserIdOrNull();
+        if (userId == null || entry.getCreatedBy() == null || !userId.equals(entry.getCreatedBy().getId())) {
+            throw new AccessDeniedException("No permission to access this calendar entry");
+        }
+    }
 
     @Override
     public List<Map<String, Object>> getAllEvents() {
@@ -74,9 +90,11 @@ public class EventCalendarServiceImpl implements EventCalendarService {
 
         Pageable pageable = PageRequest.of(pagingData.getPage(), pagingData.getSize(), sort);
 
+        boolean admin = eventAccessService.isCurrentUserAdmin();
+        Integer userId = contextUtils.getCurrentUserIdOrNull();
         Specification<EventCalendar> spec = (root, query, criteriaBuilder) -> {
             query.distinct(true);
-            return null;
+            return admin ? null : criteriaBuilder.equal(root.get("createdBy").get("id"), userId);
         };
 
         if (pagingData.getSearchField() != null && pagingData.getSearchText() != null) {
@@ -96,6 +114,7 @@ public class EventCalendarServiceImpl implements EventCalendarService {
     public EventCalendarDTO findByUuid(String uuid) {
         EventCalendar event = eventCalendarRepository.findByUuid(uuid)
                 .orElseThrow(() -> new ResourceNotFoundException("EventCalendar not found with uuid: " + uuid));
+        assertOwnEntry(event);
         EventCalendarDTO dto = modelMapper.map(event, EventCalendarDTO.class);
         dto.setEventId(event.getUuid());
         return dto;
@@ -116,6 +135,7 @@ public class EventCalendarServiceImpl implements EventCalendarService {
     public EventCalendar updateEventCalendar(EventCalendarDTO dto) {
         EventCalendar event = eventCalendarRepository.findByUuid(dto.getEventId())
                 .orElseThrow(() -> new ResourceNotFoundException("EventCalendar not found"));
+        assertOwnEntry(event);
         event.setEventName(dto.getEventName());
         event.setEventDate(dto.getEventDate());
         event.setLocation(dto.getLocation());

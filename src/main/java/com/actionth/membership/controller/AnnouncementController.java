@@ -1,5 +1,6 @@
 package com.actionth.membership.controller;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -90,6 +91,7 @@ public class AnnouncementController {
         }
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/updateAnnouncementReadStatus")
     public Response<Void> updateAnnouncementReadStatus(@RequestBody AnnouncementDTO announcement) {
         announcementService.updateAnnouncementReadStatus(announcement);

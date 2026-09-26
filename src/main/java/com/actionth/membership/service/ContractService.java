@@ -1,5 +1,6 @@
 package com.actionth.membership.service;
 
+import com.actionth.membership.model.dto.ContractDocumentDTO;
 import com.actionth.membership.model.PagingData;
 import com.actionth.membership.model.request.ContractDTORequest;
 import org.springframework.data.domain.Page;
@@ -23,4 +24,6 @@ public interface ContractService {
     void regeneratePdf(String uuid);
 
     void markReadyForSign(String uuid, boolean ready);
+
+    ContractDocumentDTO resolvePreview(ContractDocumentDTO request);
 }

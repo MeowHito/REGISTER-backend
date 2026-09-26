@@ -1,5 +1,6 @@
 package com.actionth.membership.controller;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,6 +64,7 @@ public class EventCalendarController {
         }
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping
     public Response<Void> approveEvent(@RequestBody EventCalendarDTO eventCalendarDTO) {
         try {
@@ -88,6 +90,7 @@ public class EventCalendarController {
         }
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping
     public Response<Void> deleteEvent(@RequestParam String id) {
         try {

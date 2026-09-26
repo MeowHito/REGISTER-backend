@@ -1,5 +1,6 @@
 package com.actionth.membership.controller;
 
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import com.actionth.membership.model.User;
 import com.actionth.membership.model.dto.EventDto;
@@ -14,6 +15,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import com.actionth.membership.response.Response;
+import com.actionth.membership.service.EventAccessService;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -25,6 +27,9 @@ public class EventController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private EventAccessService eventAccessService;
 
     @PostMapping("/updateStatus")
     public Response<Void> updateStatus(@RequestBody EventDto dto) {
@@ -57,7 +62,13 @@ public class EventController {
 
     @GetMapping("/{uuid}")
     public Response<EventDto> getEventByLinkOrUuid(@PathVariable String uuid) {
-        return new Response<>(eventService.getEventByLinkOrUuid(uuid), "Events retrieved successfully", true);
+        EventDto event = eventService.getEventByLinkOrUuid(uuid);
+        // A published event is public (the registration page loads it); a draft is
+        // only for the organizers who can manage it.
+        if (Boolean.TRUE.equals(event.getIsDraft()) && isCurrentUserOrganizer()) {
+            eventAccessService.assertCanByEventUuid(event.getId(), EventAccessService.Access.READ);
+        }
+        return new Response<>(event, "Events retrieved successfully", true);
     }
 
     @PostMapping("/getAllEvents")
@@ -75,25 +86,47 @@ public class EventController {
         return new Response<>(eventService.summarize(generalRequest), "Event summary retrieved successfully", true);
     }
 
-    /** An organizer only ever sees the events they hold a permission on — same rule for list and stats. */
+    /**
+     * Only an admin sees every event. Anyone else only sees the events they organize or were
+     * invited to with read access — same rule for list and stats. The client's createdBy is
+     * always overwritten, so it can't be used to widen or borrow someone else's scope.
+     */
     private void scopeToCurrentOrganizer(GeneralRequest generalRequest) {
-        User user = userService.getCurrentUserSession();
-
-        if (user != null && user.getRole() != null) {
-            String role = user.getRole().getRole();
-            if ("organizer".equals(role)) {
-                generalRequest.setCreatedBy(user.getId());
-            }
+        if (eventAccessService.isCurrentUserAdmin()) {
+            generalRequest.setCreatedBy(null);
+            return;
         }
+        User user = userService.getCurrentUserSession();
+        if (user == null || user.getId() == null) {
+            throw new AccessDeniedException("Unauthenticated");
+        }
+        generalRequest.setCreatedBy(user.getId());
+    }
+
+    /** A non-admin may only list their own events, whatever user id they pass. */
+    private String scopeUserUuid(String requestedUuid) {
+        if (eventAccessService.isCurrentUserAdmin()) {
+            return requestedUuid;
+        }
+        User user = userService.getCurrentUserSession();
+        if (user == null || user.getUuid() == null) {
+            throw new AccessDeniedException("Unauthenticated");
+        }
+        return user.getUuid();
+    }
+
+    private boolean isCurrentUserOrganizer() {
+        User user = userService.getCurrentUserSession();
+        return user != null && user.getRole() != null && "organizer".equals(user.getRole().getRole());
     }
 
     @GetMapping("/getEventByOrganizer")
     public Response<List<EventDto>> getEventByOrganizer(@RequestParam String id) {
-        return new Response<>(eventService.findEventByOrganizer(id), "Event retrieved successfully", true);
+        return new Response<>(eventService.findEventByOrganizer(scopeUserUuid(id)), "Event retrieved successfully", true);
     }
 
     @GetMapping("/getEventByPermission")
     public Response<List<EventDto>> getEventByPermission(@RequestParam String id) {
-        return new Response<>(eventService.findEventByPermission(id), "Event retrieved successfully", true);
+        return new Response<>(eventService.findEventByPermission(scopeUserUuid(id)), "Event retrieved successfully", true);
     }
 }

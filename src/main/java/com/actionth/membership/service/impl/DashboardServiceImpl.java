@@ -44,6 +44,7 @@ import com.actionth.membership.repository.EventRepository;
 import com.actionth.membership.repository.EventTypeRepository;
 import com.actionth.membership.repository.OrderRepository;
 import com.actionth.membership.service.DashboardService;
+import com.actionth.membership.service.EventAccessService;
 import com.actionth.membership.service.UserService;
 
 import lombok.RequiredArgsConstructor;
@@ -62,6 +63,7 @@ public class DashboardServiceImpl implements DashboardService {
     private final EventTypeRepository eventTypeRepository;
     private final OrderRepository orderRepository;
     private final UserService userService;
+    private final EventAccessService eventAccessService;
 
     private User requireUser() {
         User user = userService.getCurrentUserSession();
@@ -127,6 +129,7 @@ public class DashboardServiceImpl implements DashboardService {
 
         Event event = eventRepository.findByUuid(eventUuid)
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+        eventAccessService.assertCan(event, EventAccessService.Access.READ);
 
         List<EventType> eventTypes = eventTypeRepository.findByEventUuid(event.getUuid());
         // Optional distance filter; null keeps every figure event-wide as before.
@@ -590,6 +593,7 @@ public class DashboardServiceImpl implements DashboardService {
 
         Event event = eventRepository.findByUuid(eventUuid)
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+        eventAccessService.assertCan(event, EventAccessService.Access.READ);
 
         List<EventType> eventTypes = eventTypeRepository.findByEventUuid(event.getUuid());
         // Optional distance filter; null keeps every figure event-wide as before.

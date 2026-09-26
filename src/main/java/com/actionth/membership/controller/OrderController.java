@@ -1,5 +1,6 @@
 package com.actionth.membership.controller;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.actionth.membership.model.Orders;
 import com.actionth.membership.model.dto.OrderUpdateResponse;
 import com.actionth.membership.repository.OrderRepository;
@@ -69,6 +70,8 @@ public class OrderController {
         return ResponseEntity.ok(response);
     }
 
+    // Keyed by the internal int id, which the UI never has; kept as an admin repair tool only.
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/update-payment-method")
     public ResponseEntity<Map<String, String>> updatePaymentMethod(@RequestBody UpdatePaymentMethodRequest request) {
         boolean updated = orderService.updatePaymentMethod(request.getOrderId(), request.getPaymentMethod());
@@ -134,6 +137,7 @@ public class OrderController {
      * Resend payment success email with timezone clarification
      * Sends the same confirmation email but with a correction notice explaining timezone display
      */
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/{orderUuid}/resend-payment-email")
     public ResponseEntity<Map<String, Object>> resendPaymentEmail(@PathVariable String orderUuid) {
         log.info("[Resend Email API] Received request to resend payment email for orderUuid: {}", orderUuid);
@@ -202,6 +206,7 @@ public class OrderController {
      * Batch resend payment success emails with timezone correction notice for all paid orders of an event.
      * Useful for correcting timezone display for all customers who received emails before the fix.
      */
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/batch-resend-payment-email/{eventUuid}")
     public ResponseEntity<Map<String, Object>> batchResendPaymentEmail(@PathVariable String eventUuid) {
         log.info("[Batch Resend] Received request for eventUuid: {}", eventUuid);
@@ -254,6 +259,7 @@ public class OrderController {
     /**
      * Resend payment success emails with timezone correction for ALL paid orders across all events.
      */
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/resend-all-payment-email")
     public ResponseEntity<Map<String, Object>> resendAllPaymentEmail() {
         log.info("[Resend All] Received request to resend payment emails for all paid orders");

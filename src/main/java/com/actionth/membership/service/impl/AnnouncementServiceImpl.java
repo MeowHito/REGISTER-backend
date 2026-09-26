@@ -1,5 +1,7 @@
 package com.actionth.membership.service.impl;
 
+import com.actionth.membership.service.EventAccessService;
+import com.actionth.membership.service.EventAccessService.Access;
 import com.actionth.membership.service.NotificationService;
 import com.actionth.membership.constant.NotificationType;
 import java.time.OffsetDateTime;
@@ -67,6 +69,8 @@ public class AnnouncementServiceImpl implements AnnouncementService {
 
     private final NotificationService notificationService;
 
+    private final EventAccessService eventAccessService;
+
     @Override
     public Page<AnnouncementDTO> findAll(PagingData pagingData) {
         User user = userService.getCurrentUserSession();
@@ -126,6 +130,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
     public AnnouncementDTO findByUuid(String uuid) {
         Announcement announcement = announcementRepository.findByUuid(uuid)
                 .orElseThrow(() -> new ResourceNotFoundException("Announcement not found"));
+        eventAccessService.assertCan(announcement.getEvent(), Access.READ);
         AnnouncementDTO dto = modelMapper.map(announcement, AnnouncementDTO.class);
         OffsetDateTime createdDate = announcement.getCreatedTime();
 
@@ -189,6 +194,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
 
         Event event = eventRepository.findByUuid(announcementDTO.getEventId())
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+        eventAccessService.assertCan(event, Access.UPDATE);
 
         announcement.setEvent(event);
 
@@ -226,6 +232,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
 
         Announcement announcement = announcementRepository.findByUuid(announcementDTO.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Announcement not found"));
+        eventAccessService.assertCan(announcement.getEvent(), Access.UPDATE);
 
         mapAnnouncement(announcementDTO, announcement);
 
@@ -278,6 +285,7 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         if (dto.getEventId() != null) {
             Event event = eventRepository.findByUuid(dto.getEventId())
                     .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
+            eventAccessService.assertCan(event, Access.UPDATE);
             announcement.setEvent(event);
         }
     }
@@ -298,10 +306,12 @@ public class AnnouncementServiceImpl implements AnnouncementService {
         if ("hard".equals(mode)) {
             Announcement entity = announcementRepository.findByUuid(uuid)
                     .orElseThrow(() -> new RuntimeException("Announcement not found"));
+            eventAccessService.assertCan(entity.getEvent(), Access.UPDATE);
             announcementRepository.delete(entity);
         } else if ("soft".equals(mode)) {
             Announcement entity = announcementRepository.findByUuid(uuid)
                     .orElseThrow(() -> new RuntimeException("Announcement not found"));
+            eventAccessService.assertCan(entity.getEvent(), Access.UPDATE);
             entity.setActive(false);
             announcementRepository.save(entity);
         }

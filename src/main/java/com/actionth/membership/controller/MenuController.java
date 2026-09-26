@@ -1,5 +1,6 @@
 package com.actionth.membership.controller;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.actionth.membership.model.PagingData;
 import com.actionth.membership.model.dto.MenuDto;
 import com.actionth.membership.response.Response;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/menu")
+@PreAuthorize("hasRole('ADMIN')")
 @RequiredArgsConstructor
 public class MenuController {
 
