@@ -16,6 +16,7 @@ public class EventViewDto {
     private String name;
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
     private OffsetDateTime eventDate;
+    private String organizerName;
     private String location;
     private CountryStateDto province;
     private String type;
