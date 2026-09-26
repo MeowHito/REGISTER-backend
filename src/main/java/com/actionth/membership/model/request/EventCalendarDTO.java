@@ -27,5 +27,7 @@ public class EventCalendarDTO {
     private String phone;
     private Boolean isApproved;
     private String rejectReason;
+    private String source;
+    private String sourceUrl;
 
 }

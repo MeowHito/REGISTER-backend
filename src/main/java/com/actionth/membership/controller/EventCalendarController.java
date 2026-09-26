@@ -3,14 +3,21 @@ package com.actionth.membership.controller;
 import org.springframework.security.access.prepost.PreAuthorize;
 import java.util.Map;
 
+import org.quartz.JobDataMap;
+import org.quartz.JobKey;
+import org.quartz.Scheduler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 
+import com.actionth.membership.dto.EventCalendarImportRequest;
+import com.actionth.membership.dto.EventCalendarImportStatus;
+import com.actionth.membership.job.ImportEventCalendarJob;
 import com.actionth.membership.model.EventCalendar;
 import com.actionth.membership.model.PagingData;
 import com.actionth.membership.model.request.EventCalendarDTO;
 import com.actionth.membership.service.EmailService;
+import com.actionth.membership.service.EventCalendarImportService;
 import com.actionth.membership.service.EventCalendarService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -29,6 +36,55 @@ public class EventCalendarController {
 
     @Autowired
     private ObjectMapper mapper;
+
+    @Autowired
+    private EventCalendarImportService eventCalendarImportService;
+
+    @Autowired
+    private Scheduler scheduler;
+
+    /** Sync state for the "ดึงจากเว็บอื่น" panel in the back office. */
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/import/status")
+    public Response<EventCalendarImportStatus> getImportStatus() {
+        return new Response<>(eventCalendarImportService.getStatus(), "Import status retrieved", true);
+    }
+
+    /**
+     * Kicks off the import in the background (through Quartz, so it shares the job log and
+     * never blocks the request). Poll {@code /import/status} to watch it finish.
+     */
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/import/sync")
+    public Response<EventCalendarImportStatus> triggerImport(
+            @RequestBody(required = false) EventCalendarImportRequest request) {
+        if (eventCalendarImportService.isRunning()) {
+            return new Response<>(eventCalendarImportService.getStatus(), "กำลังดึงข้อมูลอยู่ กรุณารอสักครู่", false);
+        }
+        try {
+            JobDataMap data = new JobDataMap();
+            if (request != null && request.getHorizonMonths() != null) {
+                data.put(ImportEventCalendarJob.DATA_HORIZON, request.getHorizonMonths());
+            }
+            data.put(ImportEventCalendarJob.DATA_CLEAR_FIRST, request != null && request.isClearFirst());
+            scheduler.triggerJob(new JobKey(ImportEventCalendarJob.JOB_NAME), data);
+            return new Response<>(eventCalendarImportService.getStatus(), "เริ่มดึงข้อมูลแล้ว", true);
+        } catch (Exception e) {
+            return new Response<>(null, "ไม่สามารถเริ่มดึงข้อมูลได้: " + e.getMessage(), false);
+        }
+    }
+
+    /** Removes every imported row (manual submissions stay) so the next sync starts from scratch. */
+    @PreAuthorize("hasRole('ADMIN')")
+    @DeleteMapping("/import")
+    public Response<Long> clearImported() {
+        try {
+            long removed = eventCalendarImportService.clearImported();
+            return new Response<>(removed, "ลบข้อมูลที่ดึงมาแล้ว " + removed + " รายการ", true);
+        } catch (IllegalStateException e) {
+            return new Response<>(null, e.getMessage(), false);
+        }
+    }
 
     @GetMapping("/getNotiEventCalendar")
     public ResponseEntity<Map<String, Long>> countPendingEvents() {
@@ -69,11 +125,14 @@ public class EventCalendarController {
     public Response<Void> approveEvent(@RequestBody EventCalendarDTO eventCalendarDTO) {
         try {
             EventCalendar updatedEvent = eventCalendarService.updateApproveStatus(eventCalendarDTO);
-            emailService.sendEventCalendarMail(
-                    updatedEvent.getEmail(),
-                    updatedEvent.getEventName(),
-                    updatedEvent.getIsApproved(),
-                    updatedEvent.getRejectReason());
+            // Imported rows have no submitter email — nothing to notify.
+            if (updatedEvent.getEmail() != null && !updatedEvent.getEmail().isBlank()) {
+                emailService.sendEventCalendarMail(
+                        updatedEvent.getEmail(),
+                        updatedEvent.getEventName(),
+                        updatedEvent.getIsApproved(),
+                        updatedEvent.getRejectReason());
+            }
             return new Response<>(null, "Event approval status updated", true);
         } catch (Exception e) {
             return new Response<>(null, "Failed to update event approval", false);

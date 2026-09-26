@@ -10,6 +10,7 @@ public final class NotificationType {
     public static final String HELP_REQUEST = "HELP_REQUEST";
     public static final String ANNOUNCEMENT_SUBMITTED = "ANNOUNCEMENT_SUBMITTED";
     public static final String EVENT_CALENDAR_SUBMITTED = "EVENT_CALENDAR_SUBMITTED";
+    public static final String EVENT_CALENDAR_IMPORTED = "EVENT_CALENDAR_IMPORTED";
 
     /** Orders. */
     public static final String ORDER_REVIEW = "ORDER_REVIEW";

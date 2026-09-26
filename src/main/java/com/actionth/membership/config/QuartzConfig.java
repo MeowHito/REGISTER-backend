@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import com.actionth.membership.job.ImportEventCalendarJob;
 import com.actionth.membership.job.ProcessEmailQueueJob;
 import com.actionth.membership.job.ResendFailedEmailsJob;
 import com.actionth.membership.job.UpdateOverduePaymentsJob;
@@ -125,6 +126,34 @@ public class QuartzConfig {
                 .forJob(processEmailQueueJobDetail())
                 .withIdentity("processEmailQueueTrigger")
                 .withDescription("Trigger for processing email queue")
+                .withSchedule(CronScheduleBuilder.cronSchedule(cronExpression))
+                .build();
+    }
+
+    /**
+     * JobDetail for importing the external running-event calendar
+     */
+    @Bean
+    public JobDetail importEventCalendarJobDetail() {
+        return JobBuilder.newJob(ImportEventCalendarJob.class)
+                .withIdentity(ImportEventCalendarJob.JOB_NAME)
+                .withDescription("Import upcoming races from joggingandrunning.com into the event calendar queue")
+                .storeDurably()
+                .build();
+    }
+
+    /**
+     * Trigger for the calendar import
+     * Runs every day at 3:00 AM (after the email jobs, before the working day)
+     */
+    @Bean
+    public Trigger importEventCalendarTrigger() {
+        String cronExpression = "0 0 3 * * ?";
+
+        return TriggerBuilder.newTrigger()
+                .forJob(importEventCalendarJobDetail())
+                .withIdentity("importEventCalendarTrigger")
+                .withDescription("Trigger for importing the external event calendar")
                 .withSchedule(CronScheduleBuilder.cronSchedule(cronExpression))
                 .build();
     }
