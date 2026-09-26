@@ -118,7 +118,7 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     @Override
-    public DashboardOverviewDTO getDashboardOverview(String eventUuid) {
+    public DashboardOverviewDTO getDashboardOverview(String eventUuid, String eventTypeUuid) {
         User user = requireUser();
         boolean admin = isAdmin(user);
         
@@ -128,11 +128,15 @@ public class DashboardServiceImpl implements DashboardService {
         Event event = eventRepository.findByUuid(eventUuid)
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
 
-        Long totalParticipants = dashboardRepository.countByEvent(eventUuid, userUuid, admin);
-
         List<EventType> eventTypes = eventTypeRepository.findByEventUuid(event.getUuid());
+        // Optional distance filter; null keeps every figure event-wide as before.
+        EventType selectedType = resolveEventType(eventTypes, eventTypeUuid);
+        String typeUuid = selectedType == null ? null : selectedType.getUuid();
+
+        Long totalParticipants = dashboardRepository.countByEvent(eventUuid, userUuid, admin, typeUuid);
 
         int capacityByEvent = eventTypes.stream()
+                .filter(et -> selectedType == null || et == selectedType)
                 .mapToInt(et -> et.getQuota() != null ? et.getQuota() : 0)
                 .sum();
 
@@ -214,14 +218,30 @@ public class DashboardServiceImpl implements DashboardService {
             progressApplicants = (int) ((totalParticipants * 100) / capacityByEvent);
         }
 
-        Long totalRegistrationFee = Optional.ofNullable(orderRepository.sumRegistrationUnitPrice(eventUuid)).orElse(0L);
-        Long totalShippingFee = Optional.ofNullable(orderRepository.sumShippingFee(eventUuid)).orElse(0L);
-        Long totalNetRevenue = Optional.ofNullable(orderRepository.sumTotalNetAmount(eventUuid)).orElse(0L);
+        Long totalRegistrationFee;
+        Long totalShippingFee;
+        Long totalNetRevenue;
+        if (selectedType == null) {
+            totalRegistrationFee = Optional.ofNullable(orderRepository.sumRegistrationUnitPrice(eventUuid)).orElse(0L);
+            totalShippingFee = Optional.ofNullable(orderRepository.sumShippingFee(eventUuid)).orElse(0L);
+            totalNetRevenue = Optional.ofNullable(orderRepository.sumTotalNetAmount(eventUuid)).orElse(0L);
+        } else {
+            // Orders can mix distances, so one distance's money comes from its runners' snapshot prices
+            // (plus its share of add-ons), not from order totals.
+            Map<String, Object> money = Optional
+                    .ofNullable(dashboardRepository.sumPaidMoneyByEventType(eventUuid, typeUuid))
+                    .orElse(Map.of());
+            double addOns = Optional.ofNullable(dashboardRepository.sumPaidAddOnRevenueByEventType(eventUuid, typeUuid))
+                    .orElse(0d);
+            totalRegistrationFee = toLong(money.get("registrationFee"));
+            totalShippingFee = toLong(money.get("shippingFee"));
+            totalNetRevenue = toLong(money.get("netAmount")) + Math.round(addOns);
+        }
 
         List<Map<String, Object>> paymentStatusByMethodRaw = Collections.emptyList();
         try {
             paymentStatusByMethodRaw = Optional
-                    .ofNullable(dashboardRepository.countPaymentStatusByMethod(eventUuid, userId, admin))
+                    .ofNullable(dashboardRepository.countPaymentStatusByMethod(eventUuid, userId, admin, typeUuid))
                     .orElse(Collections.emptyList());
         } catch (Exception e) {
             log.error("Failed to count payment status by method. Fallback to empty list.", e);
@@ -231,7 +251,7 @@ public class DashboardServiceImpl implements DashboardService {
         List<Map<String, Object>> participantsPerDayRaw = Collections.emptyList();
         try {
             participantsPerDayRaw = Optional.ofNullable(
-                    dashboardRepository.countPerDay(eventUuid, userUuid, admin)).orElse(Collections.emptyList());
+                    dashboardRepository.countPerDay(eventUuid, userUuid, admin, typeUuid)).orElse(Collections.emptyList());
         } catch (Exception e) {
             log.warn("Failed to count participants per day, fallback to empty list", e);
         }
@@ -241,7 +261,7 @@ public class DashboardServiceImpl implements DashboardService {
         List<Map<String, Object>> paidParticipantsPerDay = Collections.emptyList();
         try {
             List<Map<String, Object>> paidRaw = Optional.ofNullable(
-                    dashboardRepository.countPaidParticipantsByPaymentDate(eventUuid, userUuid, admin))
+                    dashboardRepository.countPaidParticipantsByPaymentDate(eventUuid, userUuid, admin, typeUuid))
                     .orElse(Collections.emptyList());
             paidParticipantsPerDay = buildPaidParticipantsPerDay(participantsPerDay, paidRaw);
         } catch (Exception e) {
@@ -251,7 +271,7 @@ public class DashboardServiceImpl implements DashboardService {
         List<Map<String, Object>> failureReasonsRaw = Collections.emptyList();
         try {
             failureReasonsRaw = Optional
-                    .ofNullable(dashboardRepository.countFailureReasons(eventUuid, userId, admin))
+                    .ofNullable(dashboardRepository.countFailureReasons(eventUuid, userId, admin, typeUuid))
                     .orElse(Collections.emptyList());
         } catch (Exception e) {
             log.error("Failed to count failure reasons. Fallback to empty list.", e);
@@ -281,8 +301,9 @@ public class DashboardServiceImpl implements DashboardService {
             log.warn("Failed to count paid participants by event type. Fallback to zeros.", e);
         }
 
-        long paidSum = paidByEventType.values().stream()
-                .mapToLong(Integer::longValue).sum();
+        long paidSum = selectedType == null
+                ? paidByEventType.values().stream().mapToLong(Integer::longValue).sum()
+                : paidByEventType.getOrDefault(selectedType.getName(), 0);
 
         int progressPayment = 0;
         if (totalParticipants > 0) {
@@ -290,6 +311,7 @@ public class DashboardServiceImpl implements DashboardService {
         }
 
         return DashboardOverviewDTO.builder()
+                .eventTypes(toEventTypeRefs(eventTypes))
                 .participantByEvent(totalParticipants.intValue())
                 .participantByEventType(participantWithCapacity)
                 .capacityByEvent(capacityByEvent)
@@ -559,7 +581,7 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     @Override
-    public DashboardRegistrationDTO getDashboardRegistration(String eventUuid) {
+    public DashboardRegistrationDTO getDashboardRegistration(String eventUuid, String eventTypeUuid) {
         User user = requireUser();
         boolean admin = isAdmin(user);
         
@@ -569,18 +591,22 @@ public class DashboardServiceImpl implements DashboardService {
         Event event = eventRepository.findByUuid(eventUuid)
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
 
+        List<EventType> eventTypes = eventTypeRepository.findByEventUuid(event.getUuid());
+        // Optional distance filter; null keeps every figure event-wide as before.
+        EventType selectedType = resolveEventType(eventTypes, eventTypeUuid);
+        String typeUuid = selectedType == null ? null : selectedType.getUuid();
+
         Long totalParticipants;
         try {
             totalParticipants = Optional.ofNullable(
-                    dashboardRepository.countByEvent(eventUuid, userUuid, admin)).orElse(0L);
+                    dashboardRepository.countByEvent(eventUuid, userUuid, admin, typeUuid)).orElse(0L);
         } catch (Exception e) {
             log.error("Failed to count participants by event", e);
             totalParticipants = 0L;
         }
 
-        List<EventType> eventTypes = eventTypeRepository.findByEventUuid(event.getUuid());
-
         int totalCapacity = eventTypes.stream()
+                .filter(et -> selectedType == null || et == selectedType)
                 .mapToInt(et -> et.getQuota() != null ? et.getQuota() : 0)
                 .sum();
 
@@ -617,23 +643,25 @@ public class DashboardServiceImpl implements DashboardService {
             log.warn("Failed to count paid participants by event type. Fallback to zeros.", e);
         }
 
-        long paidSum = paidByEventType.values().stream()
-                .mapToLong(Integer::longValue).sum();
+        long paidSum = selectedType == null
+                ? paidByEventType.values().stream().mapToLong(Integer::longValue).sum()
+                : paidByEventType.getOrDefault(selectedType.getName(), 0);
 
         Long paid = 0L;
         Long pending = 0L;
         Long unpaid = 0L;
         try {
             paid = Optional.ofNullable(
-                    orderRepository.countOrdersByStatus(eventUuid, "SUCCESS")).orElse(0L);
+                    orderRepository.countOrdersByStatus(eventUuid, "SUCCESS", typeUuid)).orElse(0L);
 
             pending = Optional.ofNullable(
-                    orderRepository.countOrdersByStatus(eventUuid, "PENDING")).orElse(0L);
+                    orderRepository.countOrdersByStatus(eventUuid, "PENDING", typeUuid)).orElse(0L);
 
             unpaid = Optional.ofNullable(
                     orderRepository.countOrdersByStatuses(
                             eventUuid,
-                            List.of("FAILED", "CANCELLED", "CANCELED", "CANCEL")))
+                            List.of("FAILED", "CANCELLED", "CANCELED", "CANCEL"),
+                            typeUuid))
                     .orElse(0L);
         } catch (Exception e) {
             log.error("Failed to count orders by payment status", e);
@@ -675,7 +703,7 @@ public class DashboardServiceImpl implements DashboardService {
         List<Map<String, Object>> genderCounts;
 
         try {
-            genderCounts = dashboardRepository.countPaidGenderByEvent(eventUuid, userUuid, admin);
+            genderCounts = dashboardRepository.countPaidGenderByEvent(eventUuid, userUuid, admin, typeUuid);
         } catch (Exception e) {
             log.error("DB error while fetching gender counts", e);
             genderCounts = Collections.emptyList();
@@ -736,7 +764,7 @@ public class DashboardServiceImpl implements DashboardService {
 
         Map<String, Map<String, Integer>> ageGroupByEvent = new LinkedHashMap<>();
         try {
-            List<Map<String, Object>> rows = dashboardRepository.countPaidAgeGroupByEvent(eventUuid, userId, admin);
+            List<Map<String, Object>> rows = dashboardRepository.countPaidAgeGroupByEvent(eventUuid, userId, admin, typeUuid);
 
             for (Map<String, Object> row : rows) {
                 String ageGroup = String.valueOf(row.get("ageGroup"));
@@ -775,7 +803,7 @@ public class DashboardServiceImpl implements DashboardService {
         List<Map<String, Object>> shirtRows;
         try {
             shirtRows = Optional
-                    .ofNullable(dashboardRepository.countPaidShirtByEvent(eventUuid, userUuid, admin))
+                    .ofNullable(dashboardRepository.countPaidShirtByEvent(eventUuid, userUuid, admin, typeUuid))
                     .orElse(Collections.emptyList());
         } catch (Exception e) {
             log.error("Failed to count paid shirts by event", e);
@@ -844,7 +872,7 @@ public class DashboardServiceImpl implements DashboardService {
         List<Map<String, Object>> provinceStats;
         try {
             provinceStats = Optional
-                    .ofNullable(dashboardRepository.countPaidByProvince(eventUuid, userUuid, admin))
+                    .ofNullable(dashboardRepository.countPaidByProvince(eventUuid, userUuid, admin, typeUuid))
                     .orElse(Collections.emptyList());
         } catch (Exception e) {
             log.error("Failed to count paid participants by province", e);
@@ -870,7 +898,7 @@ public class DashboardServiceImpl implements DashboardService {
         List<DashboardRegistrationDTO.TimeBucketCountDto> registerDateCountMap;
         try {
             registerDateCountMap = Optional
-                    .ofNullable(dashboardRepository.countPaidByRegisterDate(eventUuid, userId, admin))
+                    .ofNullable(dashboardRepository.countPaidByRegisterDate(eventUuid, userId, admin, typeUuid))
                     .orElse(Collections.emptyList())
                     .stream()
                     .filter(Objects::nonNull)
@@ -888,7 +916,7 @@ public class DashboardServiceImpl implements DashboardService {
         OffsetDateTime registrationOpen = toUtc(event.getStartRegistrationDate());
         OffsetDateTime registrationClose = toUtc(event.getEndRegistrationDate());
 
-        List<DashboardRegistrationDTO.AddOnSalesDto> addOnSales = buildAddOnSales(event, userUuid, admin);
+        List<DashboardRegistrationDTO.AddOnSalesDto> addOnSales = buildAddOnSales(event, userUuid, admin, typeUuid);
 
         int countInternal = 0; // ยังไม่มีข้อมูลจริง
         int countExternal = 0; // ยังไม่มีข้อมูลจริง
@@ -896,6 +924,7 @@ public class DashboardServiceImpl implements DashboardService {
         return DashboardRegistrationDTO.builder()
                 .eventId(event.getUuid())
                 .eventName(event.getName())
+                .eventTypes(toEventTypeRefs(eventTypes))
                 .participantByEvent(totalParticipants.intValue())
                 .participantByEventType(participantWithCapacity)
                 .capacityByEvent(totalCapacity)
@@ -920,12 +949,33 @@ public class DashboardServiceImpl implements DashboardService {
                 .build();
     }
 
+    /** The event's distance with this uuid, or null when none was asked for. */
+    private EventType resolveEventType(List<EventType> eventTypes, String eventTypeUuid) {
+        if (eventTypeUuid == null || eventTypeUuid.isBlank()) {
+            return null;
+        }
+        return eventTypes.stream()
+                .filter(et -> eventTypeUuid.equals(et.getUuid()))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Event type not found"));
+    }
+
+    private List<Map<String, String>> toEventTypeRefs(List<EventType> eventTypes) {
+        return eventTypes.stream()
+                .map(et -> Map.of("id", et.getUuid(), "name", Optional.ofNullable(et.getName()).orElse("")))
+                .toList();
+    }
+
+    private long toLong(Object value) {
+        return value instanceof Number n ? Math.round(n.doubleValue()) : 0L;
+    }
+
     private List<DashboardRegistrationDTO.AddOnSalesDto> buildAddOnSales(Event event, String userUuid,
-            boolean admin) {
+            boolean admin, String eventTypeUuid) {
         Map<String, Map<String, Object>> salesByAddOn = new HashMap<>();
         try {
             for (Map<String, Object> row : Optional
-                    .ofNullable(dashboardRepository.sumAddOnSalesByEvent(event.getUuid(), userUuid, admin))
+                    .ofNullable(dashboardRepository.sumAddOnSalesByEvent(event.getUuid(), userUuid, admin, eventTypeUuid))
                     .orElse(List.of())) {
                 if (row != null && row.get("addOnId") != null) {
                     salesByAddOn.put(String.valueOf(row.get("addOnId")), row);

@@ -20,6 +20,7 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
           JOIN o.event e
           WHERE e.uuid = :eventUuid
             AND od.active = true
+            AND (:eventTypeUuid IS NULL OR od.eventType.id IN (SELECT xt.id FROM EventType xt WHERE xt.uuid = :eventTypeUuid))
             AND (
               :isAdmin = true
               OR EXISTS (
@@ -32,7 +33,8 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
               )
             )
       """)
-  Long countByEvent(@Param("eventUuid") String eventUuid, @Param("userUuid") String userUuid, @Param("isAdmin") boolean isAdmin);
+  Long countByEvent(@Param("eventUuid") String eventUuid, @Param("userUuid") String userUuid, @Param("isAdmin") boolean isAdmin,
+      @Param("eventTypeUuid") String eventTypeUuid);
 
   @Query("""
           SELECT COUNT(od)
@@ -112,6 +114,7 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
           JOIN o.event e
           WHERE e.uuid = :eventUuid
             AND p.active = true
+            AND (:eventTypeUuid IS NULL OR p.eventType.id IN (SELECT xt.id FROM EventType xt WHERE xt.uuid = :eventTypeUuid))
             AND o.paymentStatus = 'SUCCESS'
             AND (
               :isAdmin = true
@@ -126,7 +129,8 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
             )
           GROUP BY p.gender
       """)
-  List<Map<String, Object>> countPaidGenderByEvent(@Param("eventUuid") String eventUuid, @Param("userUuid") String userUuid, @Param("isAdmin") boolean isAdmin);
+  List<Map<String, Object>> countPaidGenderByEvent(@Param("eventUuid") String eventUuid, @Param("userUuid") String userUuid, @Param("isAdmin") boolean isAdmin,
+      @Param("eventTypeUuid") String eventTypeUuid);
 
   @Query("""
           SELECT et.name AS eventType, p.gender AS gender, COUNT(p.id) AS count
@@ -170,6 +174,7 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
           JOIN event e       ON e.id = et.eventId
           WHERE e.uuid = :eventUuid
             AND p.active = true
+            AND (:eventTypeUuid IS NULL OR p.eventTypeId IN (SELECT xt.id FROM eventType xt WHERE xt.uuid = :eventTypeUuid))
             AND o.paymentStatus = 'SUCCESS'
             AND (
               p.age IS NOT NULL
@@ -205,7 +210,8 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
           GROUP BY ag.minAge, ag.maxAge, ag.gender
           ORDER BY COALESCE(ag.minAge, 0), ag.gender
       """, nativeQuery = true)
-  List<Map<String, Object>> countPaidAgeGroupByEvent(@Param("eventUuid") String eventUuid, @Param("userId") Integer userId, @Param("isAdmin") boolean isAdmin);
+  List<Map<String, Object>> countPaidAgeGroupByEvent(@Param("eventUuid") String eventUuid, @Param("userId") Integer userId, @Param("isAdmin") boolean isAdmin,
+      @Param("eventTypeUuid") String eventTypeUuid);
 
   @Query(value = """
           SELECT
@@ -271,6 +277,7 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
           JOIN p.shirtType st
           WHERE e.uuid = :eventUuid
             AND p.active = true
+            AND (:eventTypeUuid IS NULL OR p.eventType.id IN (SELECT xt.id FROM EventType xt WHERE xt.uuid = :eventTypeUuid))
             AND o.paymentStatus = 'SUCCESS'
             AND (
               :isAdmin = true
@@ -286,7 +293,8 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
           GROUP BY st.name, ss.id, ss.name
           ORDER BY st.name, ss.id
       """)
-  List<Map<String, Object>> countPaidShirtByEvent(@Param("eventUuid") String eventUuid, @Param("userUuid") String userUuid, @Param("isAdmin") boolean isAdmin);
+  List<Map<String, Object>> countPaidShirtByEvent(@Param("eventUuid") String eventUuid, @Param("userUuid") String userUuid, @Param("isAdmin") boolean isAdmin,
+      @Param("eventTypeUuid") String eventTypeUuid);
 
   @Query("""
           SELECT et.name AS eventType, st.name AS shirtType, ss.name AS shirtSize, COUNT(p.id) AS count
@@ -328,6 +336,7 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
           JOIN o.event e
           WHERE e.uuid = :eventUuid
             AND od.active = true
+            AND (:eventTypeUuid IS NULL OR od.eventType.id IN (SELECT xt.id FROM EventType xt WHERE xt.uuid = :eventTypeUuid))
             AND o.paymentStatus = 'SUCCESS'
             AND (
               :isAdmin = true
@@ -345,16 +354,9 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
                     NULLIF(TRIM(od.province), ''),
                     'UNKNOWN'
                   )
-          ORDER BY
-            CASE
-              WHEN COALESCE(NULLIF(TRIM(od.shippingProvince), ''),
-                            NULLIF(TRIM(od.province), ''),
-                            'UNKNOWN') = 'UNKNOWN' THEN 1
-              ELSE 0
-            END,
-            COUNT(od.id) DESC
       """)
-  List<Map<String, Object>> countPaidByProvince(@Param("eventUuid") String eventUuid, @Param("userUuid") String userUuid, @Param("isAdmin") boolean isAdmin);
+  List<Map<String, Object>> countPaidByProvince(@Param("eventUuid") String eventUuid, @Param("userUuid") String userUuid, @Param("isAdmin") boolean isAdmin,
+      @Param("eventTypeUuid") String eventTypeUuid);
 
   // reg dash - ตามวันและเวลาที่จ่าย
   interface TimeBucketCountProjection {
@@ -372,6 +374,7 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
           JOIN event  e ON e.id = o.eventId
           WHERE e.uuid = :eventUuid
             AND p.active = true
+            AND (:eventTypeUuid IS NULL OR p.eventTypeId IN (SELECT xt.id FROM eventType xt WHERE xt.uuid = :eventTypeUuid))
             AND o.paymentStatus = 'SUCCESS'
             AND o.paymentDateTime IS NOT NULL
             AND (
@@ -385,10 +388,11 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
                     AND ep.active = true
               )
             )
-          GROUP BY DATE_FORMAT(o.paymentDateTime, '%Y-%m-%d %H:00:00')
-          ORDER BY DATE_FORMAT(o.paymentDateTime, '%Y-%m-%d %H:00:00')
+          GROUP BY STR_TO_DATE(DATE_FORMAT(o.paymentDateTime, '%Y-%m-%d %H:00:00'), '%Y-%m-%d %H:%i:%s')
+          ORDER BY dateTime
       """, nativeQuery = true)
-  List<TimeBucketCountProjection> countPaidByRegisterDate(@Param("eventUuid") String eventUuid, @Param("userId") Integer userId, @Param("isAdmin") boolean isAdmin);
+  List<TimeBucketCountProjection> countPaidByRegisterDate(@Param("eventUuid") String eventUuid, @Param("userId") Integer userId, @Param("isAdmin") boolean isAdmin,
+      @Param("eventTypeUuid") String eventTypeUuid);
 
   // overview dash - ตามวันที่สมัคร
   @Query("""
@@ -398,6 +402,7 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
           JOIN o.event e
           WHERE e.uuid = :eventUuid
             AND p.active = true
+            AND (:eventTypeUuid IS NULL OR p.eventType.id IN (SELECT xt.id FROM EventType xt WHERE xt.uuid = :eventTypeUuid))
             AND (
               :isAdmin = true
               OR EXISTS (
@@ -412,7 +417,8 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
           GROUP BY DATE(p.createdTime)
           ORDER BY DATE(p.createdTime)
       """)
-  List<Map<String, Object>> countPerDay(@Param("eventUuid") String eventUuid, @Param("userUuid") String userUuid, @Param("isAdmin") boolean isAdmin);
+  List<Map<String, Object>> countPerDay(@Param("eventUuid") String eventUuid, @Param("userUuid") String userUuid, @Param("isAdmin") boolean isAdmin,
+      @Param("eventTypeUuid") String eventTypeUuid);
 
   // overview dash - ตามวันที่จ่าย
   @Query("""
@@ -422,6 +428,7 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
           JOIN o.event e
           WHERE e.uuid = :eventUuid
             AND od.active = true
+            AND (:eventTypeUuid IS NULL OR od.eventType.id IN (SELECT xt.id FROM EventType xt WHERE xt.uuid = :eventTypeUuid))
             AND o.paymentStatus = 'SUCCESS'
             AND o.paymentDateTime IS NOT NULL
             AND (
@@ -438,7 +445,8 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
           GROUP BY DATE(o.paymentDateTime)
           ORDER BY DATE(o.paymentDateTime)
       """)
-  List<Map<String, Object>> countPaidParticipantsByPaymentDate(@Param("eventUuid") String eventUuid, @Param("userUuid") String userUuid, @Param("isAdmin") boolean isAdmin);
+  List<Map<String, Object>> countPaidParticipantsByPaymentDate(@Param("eventUuid") String eventUuid, @Param("userUuid") String userUuid, @Param("isAdmin") boolean isAdmin,
+      @Param("eventTypeUuid") String eventTypeUuid);
 
   // reg dash - Payment methods (รวม CANCEL เข้ากับ FAILED)
   @Query(value = """
@@ -455,6 +463,7 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
         JOIN event e ON o.eventId = e.id
         JOIN orderDetail od ON od.orderId = o.id AND od.active = TRUE
         WHERE e.uuid = :eventUuid
+          AND (:eventTypeUuid IS NULL OR od.eventTypeId IN (SELECT xt.id FROM eventType xt WHERE xt.uuid = :eventTypeUuid))
           AND (
               (o.paymentStatus='SUCCESS')
             OR (o.paymentStatus='PENDING')
@@ -476,11 +485,12 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
                    WHEN o.paymentStatus = 'SUCCESS' THEN 'SUCCESS'
                    WHEN o.paymentStatus = 'PENDING' THEN 'PENDING'
                    WHEN o.paymentStatus IN ('FAILED','CANCEL','CANCELED','CANCELLED') THEN 'FAILED'
-                   ELSE 'FAILED'
+                   ELSE 'UNKNOWN'
                  END
         ORDER BY method, status
       """, nativeQuery = true)
-  List<Map<String, Object>> countPaymentStatusByMethod(@Param("eventUuid") String eventUuid, @Param("userId") Integer userId, @Param("isAdmin") boolean isAdmin);
+  List<Map<String, Object>> countPaymentStatusByMethod(@Param("eventUuid") String eventUuid, @Param("userId") Integer userId, @Param("isAdmin") boolean isAdmin,
+      @Param("eventTypeUuid") String eventTypeUuid);
 
   // reg dash - Failure reasons (FAILED vs CANCELED)
   @Query(value = """
@@ -494,6 +504,7 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
         JOIN event e ON o.eventId = e.id
         JOIN orderDetail od ON od.orderId = o.id AND od.active = TRUE
         WHERE e.uuid = :eventUuid
+          AND (:eventTypeUuid IS NULL OR od.eventTypeId IN (SELECT xt.id FROM eventType xt WHERE xt.uuid = :eventTypeUuid))
           AND o.paymentStatus IN ('FAILED','CANCEL','CANCELED','CANCELLED')
           AND (
             :isAdmin = TRUE
@@ -509,9 +520,13 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
         GROUP BY 1
         ORDER BY 1
       """, nativeQuery = true)
-  List<Map<String, Object>> countFailureReasons(@Param("eventUuid") String eventUuid, @Param("userId") Integer userId, @Param("isAdmin") boolean isAdmin);
+  List<Map<String, Object>> countFailureReasons(@Param("eventUuid") String eventUuid, @Param("userId") Integer userId, @Param("isAdmin") boolean isAdmin,
+      @Param("eventTypeUuid") String eventTypeUuid);
 
-  /** Add-on units and revenue per add-on, split by payment state; same read gate as the other dashboard counts. */
+  /**
+   * Add-on units and revenue per add-on, split by payment state; same read gate as the other dashboard counts.
+   * With a distance, a per-order add-on counts toward its order's first runner (same rule as AddOnUtils.forParticipant).
+   */
   @Query("""
           SELECT a.uuid AS addOnId,
                  SUM(CASE WHEN o.paymentStatus = 'SUCCESS' THEN oa.qty ELSE 0 END) AS sold,
@@ -523,6 +538,9 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
           JOIN o.event e
           WHERE e.uuid = :eventUuid
             AND (oa.active IS NULL OR oa.active = true)
+            AND (:eventTypeUuid IS NULL OR COALESCE(oa.orderDetail.id,
+                  (SELECT MIN(d2.id) FROM OrderDetail d2 WHERE d2.order = o AND d2.active = true))
+                IN (SELECT d.id FROM OrderDetail d WHERE d.eventType.id IN (SELECT xt.id FROM EventType xt WHERE xt.uuid = :eventTypeUuid)))
             AND (
               :isAdmin = true
               OR EXISTS (
@@ -537,5 +555,37 @@ public interface DashboardRepository extends JpaRepository<OrderDetail, Integer>
           GROUP BY a.uuid
       """)
   List<Map<String, Object>> sumAddOnSalesByEvent(@Param("eventUuid") String eventUuid,
-      @Param("userUuid") String userUuid, @Param("isAdmin") boolean isAdmin);
+      @Param("userUuid") String userUuid, @Param("isAdmin") boolean isAdmin,
+      @Param("eventTypeUuid") String eventTypeUuid);
+
+  /** Paid registration fee / shipping / net for one distance, from each runner's snapshot prices. */
+  @Query(value = """
+        SELECT COALESCE(SUM(od.price), 0)       AS registrationFee,
+               COALESCE(SUM(od.shippingFee), 0) AS shippingFee,
+               COALESCE(SUM(od.netPrice), 0)    AS netAmount
+        FROM orderDetail od
+        JOIN orders o ON o.id = od.orderId
+        JOIN event e  ON e.id = o.eventId
+        WHERE e.uuid = :eventUuid
+          AND od.active = TRUE
+          AND o.paymentStatus = 'SUCCESS'
+          AND od.eventTypeId IN (SELECT xt.id FROM eventType xt WHERE xt.uuid = :eventTypeUuid)
+      """, nativeQuery = true)
+  Map<String, Object> sumPaidMoneyByEventType(@Param("eventUuid") String eventUuid, @Param("eventTypeUuid") String eventTypeUuid);
+
+  /** Paid add-on revenue for one distance; a per-order add-on goes to the order's first runner. */
+  @Query(value = """
+        SELECT COALESCE(SUM(oa.totalPrice), 0)
+        FROM orderAddOn oa
+        JOIN orders o ON o.id = oa.orderId
+        JOIN event e  ON e.id = o.eventId
+        WHERE e.uuid = :eventUuid
+          AND o.paymentStatus = 'SUCCESS'
+          AND (oa.active IS NULL OR oa.active = TRUE)
+          AND COALESCE(oa.orderDetailId,
+                (SELECT MIN(d2.id) FROM orderDetail d2 WHERE d2.orderId = o.id AND d2.active = TRUE))
+              IN (SELECT d.id FROM orderDetail d
+                  WHERE d.eventTypeId IN (SELECT xt.id FROM eventType xt WHERE xt.uuid = :eventTypeUuid))
+      """, nativeQuery = true)
+  Double sumPaidAddOnRevenueByEventType(@Param("eventUuid") String eventUuid, @Param("eventTypeUuid") String eventTypeUuid);
 }

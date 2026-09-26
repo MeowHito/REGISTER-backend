@@ -32,8 +32,9 @@ public class DashboardController {
     }
 
     @GetMapping("/overview/{eventId}")
-    public Response<DashboardOverviewDTO> getDashboardOverview(@PathVariable String eventId) {
-        DashboardOverviewDTO dashboard = dashboardService.getDashboardOverview(eventId);
+    public Response<DashboardOverviewDTO> getDashboardOverview(@PathVariable String eventId,
+            @RequestParam(value = "eventTypeId", required = false) String eventTypeId) {
+        DashboardOverviewDTO dashboard = dashboardService.getDashboardOverview(eventId, eventTypeId);
         return new Response<>(dashboard, "Dashboard retrieved successfully", true);
     }
 
@@ -47,9 +48,10 @@ public class DashboardController {
     }
 
     @GetMapping("/registration/{eventId}")
-    public Response<DashboardRegistrationDTO> getDashboardRegistration(@PathVariable("eventId") String eventId) {
+    public Response<DashboardRegistrationDTO> getDashboardRegistration(@PathVariable("eventId") String eventId,
+            @RequestParam(value = "eventTypeId", required = false) String eventTypeId) {
         DashboardRegistrationDTO dashboardRegistration = dashboardService
-                .getDashboardRegistration(eventId);
+                .getDashboardRegistration(eventId, eventTypeId);
         return new Response<>(dashboardRegistration, "Registration Dashboard retrieved successfully", true);
     }
 

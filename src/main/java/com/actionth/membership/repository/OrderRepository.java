@@ -234,9 +234,11 @@ public interface OrderRepository extends JpaRepository<Orders, Integer>, JpaSpec
 			    WHERE e.uuid = :eventUuid
 			      AND od.active = true
 			      AND o.paymentStatus = :status
+			      AND (:eventTypeUuid IS NULL OR od.eventType.id IN (SELECT xt.id FROM EventType xt WHERE xt.uuid = :eventTypeUuid))
 			""")
 	Long countOrdersByStatus(@Param("eventUuid") String eventUuid,
-			@Param("status") String status);
+			@Param("status") String status,
+			@Param("eventTypeUuid") String eventTypeUuid);
 
 	@Query("""
 			    SELECT COUNT(od)
@@ -246,9 +248,11 @@ public interface OrderRepository extends JpaRepository<Orders, Integer>, JpaSpec
 			    WHERE e.uuid = :eventUuid
 			      AND od.active = true
 			      AND o.paymentStatus IN :statuses
+			      AND (:eventTypeUuid IS NULL OR od.eventType.id IN (SELECT xt.id FROM EventType xt WHERE xt.uuid = :eventTypeUuid))
 			""")
 	Long countOrdersByStatuses(@Param("eventUuid") String eventUuid,
-			@Param("statuses") List<String> statuses);
+			@Param("statuses") List<String> statuses,
+			@Param("eventTypeUuid") String eventTypeUuid);
 
 	@Query(value = """
 			SELECT SUM(o.unitPrice)

@@ -20,6 +20,9 @@ public class DashboardRegistrationDTO {
 
     private String eventId;
     private String eventName;
+    /** The event's distances in order: { id: uuid, name }. */
+    @Builder.Default
+    private List<Map<String, String>> eventTypes = new ArrayList<>();
     private int participantByEvent;
 
     @Builder.Default

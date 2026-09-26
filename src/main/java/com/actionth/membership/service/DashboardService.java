@@ -11,10 +11,10 @@ public interface DashboardService {
 
         List<EventDto> getAllEvents();
 
-        DashboardOverviewDTO getDashboardOverview(String eventUuid);
+        DashboardOverviewDTO getDashboardOverview(String eventUuid, String eventTypeUuid);
 
         List<DashboardOrganizerDTO> getEventsAndOrganizers();
 
-        DashboardRegistrationDTO getDashboardRegistration(String eventUuid);
+        DashboardRegistrationDTO getDashboardRegistration(String eventUuid, String eventTypeUuid);
 
 }

@@ -16,6 +16,10 @@ import java.util.Map;
 @AllArgsConstructor
 public class DashboardOverviewDTO {
 
+        /** The event's distances in order: { id: uuid, name }. */
+        @Builder.Default
+        private List<Map<String, String>> eventTypes = new ArrayList<>();
+
         private int participantByEvent;
         
         @Builder.Default
