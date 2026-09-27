@@ -24,10 +24,17 @@ public interface EventCalendarService {
 
     EventCalendar updateApproveStatus(EventCalendarDTO dto);
 
+    /** @return the entries that were updated, so the caller can notify their submitters. */
+    List<EventCalendar> updateApproveStatusBulk(List<String> uuids, Boolean isApproved, String rejectReason);
+
+    int updateMajor(List<String> uuids, boolean isMajor);
+
     Page<EventCalendarDTO> getApprovedEvents(GeneralRequest generalRequest);
 
     long countPendingEvents();
 
     void deleteEvent(String uuid);
+
+    int deleteEvents(List<String> uuids);
 
 }

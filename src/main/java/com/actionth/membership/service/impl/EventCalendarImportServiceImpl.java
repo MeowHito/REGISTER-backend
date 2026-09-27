@@ -84,6 +84,10 @@ public class EventCalendarImportServiceImpl implements EventCalendarImportServic
     private static final Pattern P_ANCHOR = Pattern.compile("<a\\b[^>]*>", Pattern.DOTALL);
     private static final Pattern P_HREF = Pattern.compile("href=\"([^\"]+)\"");
     private static final Pattern P_TAG = Pattern.compile("<[^>]+>");
+    // The source colours a promo note into titles, e.g. <font style="color:#FF0000">(🎁ลงทะเบียนฟรี !)</font>.
+    // It advertises the source site's own perks, so the whole fragment goes, not just the tags.
+    private static final Pattern P_FONT_NOTE = Pattern.compile("<font\\b[^>]*>.*?</font>",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern P_EMOJI = Pattern.compile("[\\p{So}\\p{Cs}\\u200D\\uFE0F\\u20E3]");
     private static final Pattern P_NUMBER = Pattern.compile("(\\d+(?:\\.\\d+)?)");
     private static final Pattern P_WS = Pattern.compile("\\s+");
@@ -322,7 +326,7 @@ public class EventCalendarImportServiceImpl implements EventCalendarImportServic
         if (sourceId == null || pageUrl == null || !"publish".equals(item.path("status").asText("publish"))) {
             return true;
         }
-        String title = cleanText(HtmlUtils.htmlUnescape(item.path("title").path("rendered").asText("")));
+        String title = cleanTitle(item.path("title").path("rendered").asText(""));
         List<String> categoryNames = new ArrayList<>();
         for (JsonNode t : item.path("event_type")) {
             String name = categories.get(t.asInt());
@@ -602,6 +606,17 @@ public class EventCalendarImportServiceImpl implements EventCalendarImportServic
             log.warn("EventCalendar import: could not load provinces: {}", e.toString());
         }
         return names;
+    }
+
+    /** WordPress title → plain race name: unescaped, promo {@code <font>} notes and any other tags removed. */
+    static String cleanTitle(String rendered) {
+        if (rendered == null) {
+            return null;
+        }
+        String s = HtmlUtils.htmlUnescape(rendered);
+        s = P_FONT_NOTE.matcher(s).replaceAll(" ");
+        s = P_TAG.matcher(s).replaceAll(" ");
+        return cleanText(s);
     }
 
     static String cleanText(String s) {

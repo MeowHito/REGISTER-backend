@@ -29,5 +29,6 @@ public class EventCalendarDTO {
     private String rejectReason;
     private String source;
     private String sourceUrl;
+    private Boolean isMajor;
 
 }

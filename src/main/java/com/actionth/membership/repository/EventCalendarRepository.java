@@ -20,6 +20,8 @@ public interface EventCalendarRepository
 
     Optional<EventCalendar> findByUuid(String uuid);
 
+    List<EventCalendar> findByUuidIn(List<String> uuids);
+
     List<EventCalendar> findAll();
 
     List<EventCalendar> findByIsApprovedTrue();

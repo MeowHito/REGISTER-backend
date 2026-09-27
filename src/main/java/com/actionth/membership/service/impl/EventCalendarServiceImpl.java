@@ -17,6 +17,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.actionth.membership.exception.ResourceNotFoundException;
 import com.actionth.membership.model.Event;
@@ -124,6 +125,8 @@ public class EventCalendarServiceImpl implements EventCalendarService {
     public void createEventCalendar(EventCalendarDTO eventCalendarDTO) {
         EventCalendar event = modelMapper.map(eventCalendarDTO, EventCalendar.class);
         event.setIsApproved(null);
+        // Only an admin can promote an entry to Major (PUT /bulk-major), never the submitter.
+        event.setIsMajor(false);
         eventCalendarRepository.save(event);
         notificationService.notifyAdmins(NotificationType.EVENT_CALENDAR_SUBMITTED, "มีการฝากปฏิทินกิจกรรมใหม่",
                 event.getEventName()
@@ -158,6 +161,32 @@ public class EventCalendarServiceImpl implements EventCalendarService {
             event.setRejectReason(null);
         }
         return eventCalendarRepository.save(event);
+    }
+
+    @Override
+    @Transactional
+    public List<EventCalendar> updateApproveStatusBulk(List<String> uuids, Boolean isApproved, String rejectReason) {
+        if (uuids == null || uuids.isEmpty()) {
+            return List.of();
+        }
+        List<EventCalendar> events = eventCalendarRepository.findByUuidIn(uuids);
+        for (EventCalendar event : events) {
+            event.setIsApproved(isApproved);
+            event.setRejectReason(Boolean.FALSE.equals(isApproved) ? rejectReason : null);
+        }
+        return eventCalendarRepository.saveAll(events);
+    }
+
+    @Override
+    @Transactional
+    public int updateMajor(List<String> uuids, boolean isMajor) {
+        if (uuids == null || uuids.isEmpty()) {
+            return 0;
+        }
+        List<EventCalendar> events = eventCalendarRepository.findByUuidIn(uuids);
+        events.forEach(event -> event.setIsMajor(isMajor));
+        eventCalendarRepository.saveAll(events);
+        return events.size();
     }
 
     @Override
@@ -212,6 +241,17 @@ public class EventCalendarServiceImpl implements EventCalendarService {
         EventCalendar event = eventCalendarRepository.findByUuid(uuid)
                 .orElseThrow(() -> new RuntimeException("Event not found"));
         eventCalendarRepository.delete(event);
+    }
+
+    @Override
+    @Transactional
+    public int deleteEvents(List<String> uuids) {
+        if (uuids == null || uuids.isEmpty()) {
+            return 0;
+        }
+        List<EventCalendar> events = eventCalendarRepository.findByUuidIn(uuids);
+        eventCalendarRepository.deleteAll(events);
+        return events.size();
     }
 
 }

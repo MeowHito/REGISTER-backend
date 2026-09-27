@@ -1,6 +1,7 @@
 package com.actionth.membership.controller;
 
 import org.springframework.security.access.prepost.PreAuthorize;
+import java.util.List;
 import java.util.Map;
 
 import org.quartz.JobDataMap;
@@ -10,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 
+import com.actionth.membership.dto.EventCalendarBulkRequest;
 import com.actionth.membership.dto.EventCalendarImportRequest;
 import com.actionth.membership.dto.EventCalendarImportStatus;
 import com.actionth.membership.job.ImportEventCalendarJob;
@@ -24,6 +26,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.actionth.membership.response.Response;
 import org.springframework.web.bind.annotation.*;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @RestController
 @RequestMapping("/api/eventCalendar")
 public class EventCalendarController {
@@ -146,6 +151,48 @@ public class EventCalendarController {
         } catch (Exception e) {
             return new Response<>(null, "Failed to update event approval", false);
         }
+    }
+
+    /** Approve or reject every selected entry; submitters of manual entries get the usual email. */
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/bulk-status")
+    public Response<Integer> approveEvents(@RequestBody EventCalendarBulkRequest request) {
+        if (request.getIsApproved() == null || request.getIds() == null || request.getIds().isEmpty()) {
+            return new Response<>(null, "กรุณาเลือกรายการ", false);
+        }
+        List<EventCalendar> updated = eventCalendarService.updateApproveStatusBulk(
+                request.getIds(), request.getIsApproved(), request.getRejectReason());
+        for (EventCalendar event : updated) {
+            if (event.getEmail() == null || event.getEmail().isBlank()) {
+                continue;
+            }
+            try {
+                emailService.sendEventCalendarMail(event.getEmail(), event.getEventName(),
+                        event.getIsApproved(), event.getRejectReason());
+            } catch (Exception e) {
+                log.warn("EventCalendar bulk status: email to {} failed", event.getEmail(), e);
+            }
+        }
+        return new Response<>(updated.size(), "อัปเดตสถานะแล้ว " + updated.size() + " รายการ", true);
+    }
+
+    /** Marks / unmarks entries as Major — the dark banner at the top of the public calendar. */
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/bulk-major")
+    public Response<Integer> updateMajor(@RequestBody EventCalendarBulkRequest request) {
+        if (request.getIsMajor() == null || request.getIds() == null || request.getIds().isEmpty()) {
+            return new Response<>(null, "กรุณาเลือกรายการ", false);
+        }
+        int updated = eventCalendarService.updateMajor(request.getIds(), request.getIsMajor());
+        return new Response<>(updated,
+                (request.getIsMajor() ? "ตั้งเป็น Major แล้ว " : "ยกเลิก Major แล้ว ") + updated + " รายการ", true);
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/bulk-delete")
+    public Response<Integer> deleteEvents(@RequestBody EventCalendarBulkRequest request) {
+        int removed = eventCalendarService.deleteEvents(request.getIds());
+        return new Response<>(removed, "ลบแล้ว " + removed + " รายการ", true);
     }
 
     @PutMapping("/update")

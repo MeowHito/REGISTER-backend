@@ -7,6 +7,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 
@@ -49,5 +50,10 @@ public class EventCalendar extends StandardFields {
     /** Last modified time on the source site; the sync watermark is derived from it. */
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
     private OffsetDateTime sourceUpdatedAt;
+
+    /** Admin-picked headline race (e.g. a World Major); shown as the banner on /eventCalendar. */
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "bit(1) default 0")
+    private Boolean isMajor = false;
 
 }

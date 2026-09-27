@@ -75,4 +75,15 @@ class EventCalendarImportParserTest {
         assertEquals(LocalDate.of(2027, 1, 31), EventCalendarImportServiceImpl.parseLooseDate("2027-1-31T13:17+7:00"));
         assertEquals("2026-09-25T12:49:47Z", EventCalendarImportServiceImpl.parseGmt("2026-09-25T12:49:47").toString());
     }
+
+    @Test
+    void titleDropsColouredPromoNote() {
+        assertEquals("CHIANGMAI CITY RUN DOG ROUTE SERIES (06:30 น.)",
+                EventCalendarImportServiceImpl.cleanTitle(
+                        "CHIANGMAI CITY RUN DOG ROUTE SERIES (06:30 น.) &lt;font style=\"color:#FF0000\"&gt;(🎁ลงทะเบียนฟรี !)&lt;/font&gt;"));
+        assertEquals("Bangkok Airways Chiang Mai Half Marathon 2026",
+                EventCalendarImportServiceImpl.cleanTitle(
+                        "Bangkok Airways Chiang Mai Half Marathon 2026 <font style=\"color:#FF0000\">(🎁ดาวน์โหลดรูปฟรี!)</font>"));
+        assertEquals("Pong Yaeng Trail 2026 ปีที่ 12", EventCalendarImportServiceImpl.cleanTitle("Pong Yaeng Trail 2026 ปีที่ 12"));
+    }
 }
