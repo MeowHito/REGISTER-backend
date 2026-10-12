@@ -150,6 +150,13 @@ public class PublicAPIController {
         return new Response<>(dtos, "Public events fetched", true);
     }
 
+    /** Fired by the browser when someone opens a calendar entry's link; feeds the admin-only view count. */
+    @PostMapping("/eventCalendar/{uuid}/view")
+    public Response<Void> recordEventCalendarView(@PathVariable String uuid) {
+        eventCalendarService.recordView(uuid);
+        return new Response<>(null, "View recorded", true);
+    }
+
     @PostMapping("/eventCalendar")
     public Response<Void> createEventCalendar(@RequestBody EventCalendarDTO eventCalendarDTO) {
         eventCalendarService.createEventCalendar(eventCalendarDTO);

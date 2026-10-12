@@ -56,4 +56,9 @@ public class EventCalendar extends StandardFields {
     @Column(nullable = false, columnDefinition = "bit(1) default 0")
     private Boolean isMajor = false;
 
+    /** Times a visitor opened this entry's link from /eventCalendar (card or Major banner); shown to admins only. */
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "int default 0")
+    private Integer viewCount = 0;
+
 }

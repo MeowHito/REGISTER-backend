@@ -33,6 +33,9 @@ public interface EventCalendarService {
 
     long countPendingEvents();
 
+    /** Counts one open of the entry's link from the public calendar; unknown or unapproved ids are ignored. */
+    void recordView(String uuid);
+
     void deleteEvent(String uuid);
 
     int deleteEvents(List<String> uuids);

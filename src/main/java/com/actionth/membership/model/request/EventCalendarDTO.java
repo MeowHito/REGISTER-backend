@@ -30,5 +30,6 @@ public class EventCalendarDTO {
     private String source;
     private String sourceUrl;
     private Boolean isMajor;
+    private Integer viewCount;
 
 }

@@ -41,4 +41,10 @@ public interface EventCalendarRepository
     @Query("DELETE FROM EventCalendar e WHERE e.source = :source")
     int deleteBySource(@Param("source") String source);
 
+    /** Public click counter: only live, approved entries count, and the row is bumped in place so bursts never lose a click. */
+    @Modifying
+    @Transactional
+    @Query("UPDATE EventCalendar e SET e.viewCount = COALESCE(e.viewCount, 0) + 1 WHERE e.uuid = :uuid AND e.active = true AND e.isApproved = true")
+    int incrementViewCount(@Param("uuid") String uuid);
+
 }

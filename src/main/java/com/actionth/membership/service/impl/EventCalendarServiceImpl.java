@@ -127,6 +127,7 @@ public class EventCalendarServiceImpl implements EventCalendarService {
         event.setIsApproved(null);
         // Only an admin can promote an entry to Major (PUT /bulk-major), never the submitter.
         event.setIsMajor(false);
+        event.setViewCount(0);
         eventCalendarRepository.save(event);
         notificationService.notifyAdmins(NotificationType.EVENT_CALENDAR_SUBMITTED, "มีการฝากปฏิทินกิจกรรมใหม่",
                 event.getEventName()
@@ -234,6 +235,14 @@ public class EventCalendarServiceImpl implements EventCalendarService {
     @Override
     public long countPendingEvents() {
         return eventCalendarRepository.countByIsApprovedIsNull();
+    }
+
+    @Override
+    public void recordView(String uuid) {
+        if (uuid == null || uuid.isBlank()) {
+            return;
+        }
+        eventCalendarRepository.incrementViewCount(uuid);
     }
 
     @Override
