@@ -706,6 +706,7 @@ public class EventServiceImpl implements EventService {
 			entity.setTestMode(false);
 		}
 		entity.setFieldConfig(writeFieldConfig(dto.getFieldConfig()));
+		entity.setPdpaConsentEnabled(Boolean.TRUE.equals(dto.getPdpaConsentEnabled()));
 
 		if (dto.getProvinceId() != null) {
 			CountryState countryState = eventRepository.findCountryStateByUuid(dto.getProvinceId())
@@ -1094,6 +1095,7 @@ public class EventServiceImpl implements EventService {
 				.isDraft(event.getIsDraft())
 				.showChecklist(event.getShowChecklist())
 				.testMode(Boolean.TRUE.equals(event.getTestMode()))
+				.pdpaConsentEnabled(Boolean.TRUE.equals(event.getPdpaConsentEnabled()))
 				.fieldConfig(readFieldConfig(event.getFieldConfig()))
 				.questionSections(mapQuestionSections(event))
 				.eventConditions(event.getEventConditions().stream()

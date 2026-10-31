@@ -30,6 +30,7 @@ import com.actionth.membership.model.EventType;
 import com.actionth.membership.model.EventSelectionField;
 import com.actionth.membership.model.OrderAddOn;
 import com.actionth.membership.model.OrderDetail;
+import com.actionth.membership.model.Orders;
 import com.actionth.membership.model.PagingData;
 import com.actionth.membership.model.Pricing;
 import com.actionth.membership.model.ShirtSize;
@@ -483,6 +484,7 @@ public class ParticipantServiceImpl implements ParticipantService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Map<String, Object>> getAllParticipantDownload(Integer eventId) {
         String[] baseColumns = { "id", "หมายเลขออเดอร์", "ชื่อ", "นามสกุล", "ชื่อ (ภาษาอังกฤษ)", "นามสกุล (ภาษาอังกฤษ)",
                 "บัตรประชาชน", "เพศ", "วันเกิด", "สัญชาติ",
@@ -530,6 +532,11 @@ public class ParticipantServiceImpl implements ParticipantService {
             }
             List<String> addOnKeys = new ArrayList<>(addOnColumns.keySet());
 
+            // PDPA column only for events that ask (or once asked) for consent.
+            boolean consentColumn = participants.stream().map(OrderDetail::getOrder).filter(Objects::nonNull)
+                    .anyMatch(o -> o.getPdpaConsent() != null
+                            || (o.getEvent() != null && Boolean.TRUE.equals(o.getEvent().getPdpaConsentEnabled())));
+
             List<String> allColumns = new ArrayList<>(Arrays.asList(baseColumns));
             allColumns.addAll(questionList);
             for (String key : addOnKeys) {
@@ -538,13 +545,17 @@ public class ParticipantServiceImpl implements ParticipantService {
                     allColumns.add(addOnNoteColumns.get(key));
                 }
             }
+            allColumns.addAll(Arrays.asList(MONEY_COLUMNS));
+            if (consentColumn) {
+                allColumns.add("ยินยอมเปิดเผยข้อมูล (PDPA)");
+            }
 
             Map<String, Object> allParticipant = new HashMap<>();
             allParticipant.put("sheetName", result.get("name"));
             allParticipant.put("columns", allColumns.toArray(new String[0]));
             allParticipant.put("preHeader", List.of("ชื่ออีเว้นท์", result.get("name")));
 
-            List<List<String>> sheetData = new ArrayList<>();
+            List<List<Object>> sheetData = new ArrayList<>();
             for (OrderDetail participant : participants) {
                 ParticipantDownloadDTO dto = toDownloadDTO(participant);
 
@@ -555,7 +566,7 @@ public class ParticipantServiceImpl implements ParticipantService {
                         dto.getShippingProvince(),
                         dto.getShippingZipcode());
 
-                List<String> row = new ArrayList<>();
+                List<Object> row = new ArrayList<>();
                 row.add(dto.getId());
                 row.add(dto.getOrderNo());
                 row.add(dto.getFirstName());
@@ -610,13 +621,23 @@ public class ParticipantServiceImpl implements ParticipantService {
                 for (String key : addOnKeys) {
                     List<OrderAddOn> bought = addOnMap.getOrDefault(key, List.of());
                     int qty = bought.stream().mapToInt(oa -> oa.getQty() != null ? oa.getQty() : 0).sum();
-                    row.add(bought.isEmpty() ? "" : String.valueOf(qty));
+                    if (bought.isEmpty()) {
+                        row.add("");
+                    } else {
+                        row.add(qty);
+                    }
                     if (addOnNoteColumns.containsKey(key)) {
                         row.add(bought.stream()
                                 .map(OrderAddOn::getNote)
                                 .filter(n -> n != null && !n.isBlank())
                                 .collect(Collectors.joining(", ")));
                     }
+                }
+
+                addMoneyCells(row, participant);
+                if (consentColumn) {
+                    Boolean consent = participant.getOrder() != null ? participant.getOrder().getPdpaConsent() : null;
+                    row.add(consent == null ? "-" : consent ? "ยินยอม" : "ไม่ยินยอม");
                 }
 
                 sheetData.add(row);
@@ -626,6 +647,41 @@ public class ParticipantServiceImpl implements ParticipantService {
             formatData.add(allParticipant);
         }
         return formatData;
+    }
+
+    /**
+     * Money per participant row. Registration price, add-ons and shipping belong to the runner
+     * (per-order add-ons sit on the order's first applicant, see {@link AddOnUtils#forParticipant});
+     * discount, fee and the amount paid are order totals, so they appear on the first applicant
+     * only and a column sum still equals what was collected.
+     */
+    private static final String[] MONEY_COLUMNS = { "ค่าสมัคร (บาท)", "สินค้าเสริม (บาท)", "ค่าจัดส่ง (บาท)",
+            "ส่วนลดคูปองของออเดอร์ (บาท)", "ค่าธรรมเนียมของออเดอร์ (บาท)", "ยอดชำระทั้งออเดอร์ (บาท)",
+            "ช่องทางชำระเงิน", "วันที่ชำระเงิน" };
+
+    private static void addMoneyCells(List<Object> row, OrderDetail participant) {
+        Orders order = participant.getOrder();
+        double addOns = AddOnUtils.forParticipant(participant).stream()
+                .mapToDouble(oa -> oa.getTotalPrice() != null ? oa.getTotalPrice()
+                        : (oa.getUnitPrice() != null ? oa.getUnitPrice() : 0.0) * (oa.getQty() != null ? oa.getQty() : 0))
+                .sum();
+        boolean first = AddOnUtils.isFirstApplicant(participant);
+        row.add(money(participant.getPrice()));
+        row.add(money(addOns));
+        row.add(money(participant.getShippingFee()));
+        row.add(first && order != null ? money(order.getCouponDiscount()) : "");
+        row.add(first && order != null ? money(order.getFee()) : "");
+        row.add(first && order != null ? money(order.getTotalAmountWithFee()) : "");
+        row.add(order != null ? Objects.toString(order.getPaymentMethod(), "") : "");
+        row.add(order != null && order.getPaymentDateTime() != null
+                ? order.getPaymentDateTime().atZoneSameInstant(java.time.ZoneId.of("Asia/Bangkok"))
+                        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+                : "");
+    }
+
+    /** A number cell (rounded to satang) so the sheet can be summed; 0 when the value is missing. */
+    private static Double money(Double value) {
+        return value == null ? 0.0 : Math.round(value * 100.0) / 100.0;
     }
 
     /** "แบบ / ไซส์" of the runner's shirt in that category, or blank. */

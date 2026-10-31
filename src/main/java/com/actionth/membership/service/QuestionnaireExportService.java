@@ -67,6 +67,10 @@ public class QuestionnaireExportService {
         int no = 1;
         for (EventType et : event.getEventTypes()) {
             for (OrderDetail od : orderDetailRepository.getParticipantByEventTypeId(et.getId())) {
+                // This file goes to sponsors: a runner who declined PDPA disclosure stays out.
+                if (od.getOrder() != null && Boolean.FALSE.equals(od.getOrder().getPdpaConsent())) {
+                    continue;
+                }
                 List<String> row = new ArrayList<>();
                 row.add(String.valueOf(no++));
                 row.add(Objects.toString(od.getBibNo(), ""));

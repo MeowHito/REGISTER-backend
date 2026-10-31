@@ -125,8 +125,13 @@ public class ExcelGeneratorService {
 					row = sheet.createRow(rowIndex++);
 					Cell dataCell = row.createCell(cnt++);
 					for (Object entry : entries) {
-						dataCell.setCellValue(
-								createHelper.createRichTextString(entry != null ? String.valueOf(entry) : null));
+						if (entry instanceof Number number) {
+							// Numeric cell, so money columns can be summed in Excel.
+							dataCell.setCellValue(number.doubleValue());
+						} else {
+							dataCell.setCellValue(
+									createHelper.createRichTextString(entry != null ? String.valueOf(entry) : null));
+						}
 						dataCell.setCellStyle(dataStyle);
 						dataCell = row.createCell(cnt++);
 					}

@@ -189,6 +189,13 @@ public class OrderServiceImpl implements OrderService {
 
             order.setEvent(event);
             order.setPaymentDateTime(null);
+            if (Boolean.TRUE.equals(event.getPdpaConsentEnabled())) {
+                order.setPdpaConsent(Boolean.TRUE.equals(orderRequest.getPdpaConsent()));
+                order.setPdpaConsentAt(OffsetDateTime.now());
+            } else {
+                order.setPdpaConsent(null);
+                order.setPdpaConsentAt(null);
+            }
             validateRequiredFields(event, orderRequest);
 
             if (orderRequest.getOrderDetails() != null && !orderRequest.getOrderDetails().isEmpty()) {

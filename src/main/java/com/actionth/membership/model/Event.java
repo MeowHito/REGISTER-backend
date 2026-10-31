@@ -79,6 +79,12 @@ public class Event extends StandardFields {
     private Boolean testMode;
 
     /**
+     * Ask runners for PDPA consent to disclose their data (e.g. to sponsors) before they
+     * register. Declining never blocks registration; the answer is kept on the order.
+     */
+    private Boolean pdpaConsentEnabled;
+
+    /**
      * Which registration-form fields this event asks for, as JSON {@code {"idNo":"REQUIRED",
      * "bloodType":"HIDDEN", ...}} (values HIDDEN / OPTIONAL / REQUIRED). Missing keys fall back
      * to the platform default; name, birth date, gender and email can never be turned off.

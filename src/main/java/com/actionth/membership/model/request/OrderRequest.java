@@ -28,6 +28,8 @@ public class OrderRequest {
 
     private Double addOnTotal;
 
+    /** Answer to the event's PDPA consent prompt; ignored when the event does not ask. */
+    private Boolean pdpaConsent;
     private List<OrderDetailRequest> orderDetails;
     private List<OrderAddOnRequest> addOns;
 }

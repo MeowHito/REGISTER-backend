@@ -48,6 +48,7 @@ public class EventDto {
     private Boolean isDraft;
     private Boolean showChecklist;
     private Boolean testMode;
+    private Boolean pdpaConsentEnabled;
 
     private List<EventConditionDto> eventConditions;
     private List<EventDetailDto> eventDetails;

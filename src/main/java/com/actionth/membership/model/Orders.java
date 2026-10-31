@@ -80,6 +80,13 @@ public class Orders extends StandardFields {
     private OffsetDateTime cancelledDateTime;
     private String cancelledBy;
 
+    /**
+     * PDPA disclosure consent given before registering: true / false when the event asked,
+     * null when it did not. Runners who declined are left out of sponsor questionnaire exports.
+     */
+    private Boolean pdpaConsent;
+    private OffsetDateTime pdpaConsentAt;
+
     @Builder.Default
     @Column(name = "correctionEmailSent")
     private Boolean correctionEmailSent = false;

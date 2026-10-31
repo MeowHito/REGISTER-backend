@@ -4,11 +4,13 @@ import com.actionth.membership.model.dto.DashboardOrganizerDTO;
 import com.actionth.membership.model.dto.DashboardOverviewDTO;
 import com.actionth.membership.model.dto.DashboardRegistrationDTO;
 import com.actionth.membership.model.dto.EventDto;
+import com.actionth.membership.model.dto.QuestionStatsDTO;
 import com.actionth.membership.response.Response;
 
 import lombok.RequiredArgsConstructor;
 
 import com.actionth.membership.service.DashboardService;
+import com.actionth.membership.service.QuestionStatsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,6 +23,9 @@ public class DashboardController {
 
     @Autowired
     private DashboardService dashboardService;
+
+    @Autowired
+    private QuestionStatsService questionStatsService;
 
     /**
      * Endpoint สำหรับภาพรวมระบบ
@@ -53,6 +58,13 @@ public class DashboardController {
         DashboardRegistrationDTO dashboardRegistration = dashboardService
                 .getDashboardRegistration(eventId, eventTypeId);
         return new Response<>(dashboardRegistration, "Registration Dashboard retrieved successfully", true);
+    }
+
+    /** Answers to the event's registration questions (paid participants), for the stats charts. */
+    @GetMapping("/questions/{eventId}")
+    public Response<QuestionStatsDTO> getQuestionStats(@PathVariable("eventId") String eventId,
+            @RequestParam(value = "eventTypeId", required = false) String eventTypeId) {
+        return new Response<>(questionStatsService.getStats(eventId, eventTypeId), "Question stats retrieved", true);
     }
 
 }
