@@ -38,8 +38,10 @@ public interface EventCalendarRepository
 
     @Modifying
     @Transactional
-    @Query("DELETE FROM EventCalendar e WHERE e.source = :source")
-    int deleteBySource(@Param("source") String source);
+    @Query("DELETE FROM EventCalendar e WHERE e.source IS NOT NULL")
+    int deleteImported();
+
+    List<EventCalendar> findBySourceAndEventDateBetween(String source, OffsetDateTime from, OffsetDateTime to);
 
     /** Public click counter: only live, approved entries count, and the row is bumped in place so bursts never lose a click. */
     @Modifying

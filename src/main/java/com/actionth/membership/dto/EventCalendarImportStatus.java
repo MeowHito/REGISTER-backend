@@ -1,7 +1,5 @@
 package com.actionth.membership.dto;
 
-import java.time.OffsetDateTime;
-
 import lombok.Builder;
 import lombok.Data;
 
@@ -17,8 +15,6 @@ public class EventCalendarImportStatus {
     private int horizonMonths;
     private String source;
     private String sourceUrl;
-    /** Last source-side modification time processed; null until the first successful run. */
-    private OffsetDateTime watermark;
     private EventCalendarImportResult lastRun;
     /** Live counters of the run in progress; null when idle. */
     private EventCalendarImportResult currentRun;

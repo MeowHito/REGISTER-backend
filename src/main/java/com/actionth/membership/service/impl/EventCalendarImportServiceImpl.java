@@ -1,17 +1,21 @@
 package com.actionth.membership.service.impl;
 
 import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.YearMonth;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
@@ -19,10 +23,7 @@ import java.util.regex.Pattern;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
-import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.HtmlUtils;
@@ -38,61 +39,61 @@ import com.actionth.membership.repository.EventCalendarRepository;
 import com.actionth.membership.repository.MasterDataRepository;
 import com.actionth.membership.service.EventCalendarImportService;
 import com.actionth.membership.service.NotificationService;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Imports races from joggingandrunning.com (WordPress + EventON).
+ * Imports races from patrunning.com's monthly calendar ({@code /ปฏิทินวิ่งรายเดือน/yyyy-MM/}).
  *
- * <p>Two source endpoints are used:
- * <ul>
- * <li>{@code /wp-json/wp/v2/ajde_events} — the public REST listing. It gives id, title, link,
- * category and modified time, but <b>not</b> the race date or venue.</li>
- * <li>each event's own page — its JSON-LD {@code Event} block carries {@code startDate}, and the
- * subtitle line ("📌venue 🏃ประเภท 10/21 👥ผู้จัด … 📞เบอร์โทร …") carries venue, distances,
- * organizer and phone. The card link on that page is the organizer's registration link when
- * the site has one.</li>
- * </ul>
+ * <p>Each month page server-renders every race of that month as a card: title + link to the
+ * race's page on patrunning (whose slug is our {@code sourceId}), distance chips, a date line,
+ * province, venue, the organizer's registration link and an {@code is-free} class. Cards sit in
+ * {@code <section class="dayblock" id="d-yyyy-MM-dd">} blocks; races that started in an earlier
+ * month sit in a {@code d-ongoing} block and carry their dates only as text. Trail races are
+ * not marked on the card, so the {@code ?pr_type=trail-run} filter of each month is read too.
  *
- * <p>The listing is walked in ascending {@code modified} order and the last processed modified
- * time is kept in {@code appConfig} as a watermark, so a nightly run only touches what changed.
- * Rows are upserted by (source, sourceId); admin approval decisions are never overwritten.
+ * <p>A run reads every month from this one to the horizon (two requests a month), then upserts
+ * by (source, sourceId). Rows go live at once; an admin's later reject is never overwritten.
+ * When every page was read, rows of this source inside the window that the source no longer
+ * lists (cancelled or merged races) are removed.
  */
 @Slf4j
 @Service
 public class EventCalendarImportServiceImpl implements EventCalendarImportService {
 
-    static final String CFG_WATERMARK = "eventCalendarImport.watermark";
     static final String CFG_LAST_RUN = "eventCalendarImport.lastRun";
     static final String CFG_HORIZON = "eventCalendarImport.horizonMonths";
     static final int MIN_HORIZON = 1;
     static final int MAX_HORIZON = 36;
 
     private static final ZoneId SOURCE_ZONE = ZoneId.of("Asia/Bangkok");
-    private static final DateTimeFormatter WP_LOCAL = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
-    private static final int PAGE_SIZE = 100;
+    private static final String MONTH_PATH = "ปฏิทินวิ่งรายเดือน";
     private static final int COLUMN_MAX = 255;
 
-    private static final Pattern P_START_DATE = Pattern.compile("\"startDate\"\\s*:\\s*\"([^\"]+)\"");
-    /** EventON writes "2027-1-31T13:17+7:00" — single-digit month/day, non-standard offset. */
-    private static final Pattern P_LOOSE_ISO = Pattern.compile("(\\d{4})-(\\d{1,2})-(\\d{1,2})T(\\d{1,2}):(\\d{2})");
-    private static final Pattern P_DATA_TIME = Pattern.compile("data-time=\"(\\d{9,11})-\\d+\"");
-    private static final Pattern P_SUBTITLE = Pattern
-            .compile("class=['\"]evcal_event_subtitle['\"][^>]*>(.*?)</span>", Pattern.DOTALL);
-    private static final Pattern P_ANCHOR = Pattern.compile("<a\\b[^>]*>", Pattern.DOTALL);
-    private static final Pattern P_HREF = Pattern.compile("href=\"([^\"]+)\"");
+    private static final Pattern P_BLOCK = Pattern
+            .compile("<(?:section|details) class=\"dayblock[^\"]*\" id=\"d-([\\w-]+)\"");
+    private static final Pattern P_ARTICLE = Pattern.compile("<article class=\"pr-card([^\"]*)\">(.*?)</article>",
+            Pattern.DOTALL);
+    private static final Pattern P_TITLE = Pattern
+            .compile("class=\"pr-card__title\"><a href=\"([^\"]+)\"[^>]*>(.*?)</a>", Pattern.DOTALL);
+    private static final Pattern P_CHIP = Pattern.compile("class=\"pr-chip-sm\">(.*?)</span>", Pattern.DOTALL);
+    private static final Pattern P_META = Pattern.compile("class=\"pr-card__meta\">(.*?)</div>", Pattern.DOTALL);
+    private static final Pattern P_META_DATE = Pattern.compile("^<span>(.*?)</span>", Pattern.DOTALL);
+    private static final Pattern P_META_PROVINCE = Pattern.compile("<strong>(.*?)</strong>", Pattern.DOTALL);
+    private static final Pattern P_META_VENUE = Pattern.compile("class=\"pr-card__venue\">(.*?)</span>",
+            Pattern.DOTALL);
+    private static final Pattern P_CTA = Pattern.compile("class=\"pr-card__cta\"><a[^>]*href=\"([^\"]+)\"");
+    private static final Pattern P_EVENT_SLUG = Pattern.compile("/events/([^/?#]+)");
+    private static final Pattern P_DAY_ID = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
+    /** One end of a date line: "31", "31 ต.ค.", "31 ต.ค. 2026". */
+    private static final Pattern P_DATE_PART = Pattern
+            .compile("(\\d{1,2})\\s*([\\u0E00-\\u0E7F]{1,3}\\.[\\u0E00-\\u0E7F]{1,2}\\.)?\\s*(\\d{4})?");
+    private static final String[] THAI_MONTHS = { "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.",
+            "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค." };
     private static final Pattern P_TAG = Pattern.compile("<[^>]+>");
-    // The source colours a promo note into titles, e.g. <font style="color:#FF0000">(🎁ลงทะเบียนฟรี !)</font>.
-    // It advertises the source site's own perks, so the whole fragment goes, not just the tags.
-    private static final Pattern P_FONT_NOTE = Pattern.compile("<font\\b[^>]*>.*?</font>",
-            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-    private static final Pattern P_EMOJI = Pattern.compile("[\\p{So}\\p{Cs}\\u200D\\uFE0F\\u20E3]");
     private static final Pattern P_NUMBER = Pattern.compile("(\\d+(?:\\.\\d+)?)");
     private static final Pattern P_WS = Pattern.compile("\\s+");
-
-    private static final String[] SUBTITLE_MARKERS = { "ประเภท", "ผู้จัด", "เบอร์โทร" };
 
     private final EventCalendarRepository eventCalendarRepository;
     private final AppConfigRepository appConfigRepository;
@@ -108,20 +109,17 @@ public class EventCalendarImportServiceImpl implements EventCalendarImportServic
 
     @Value("${app.event-calendar-import.enabled:true}")
     private boolean enabled;
-    @Value("${app.event-calendar-import.source:joggingandrunning.com}")
+    @Value("${app.event-calendar-import.source:patrunning.com}")
     private String source;
-    @Value("${app.event-calendar-import.base-url:https://www.joggingandrunning.com}")
+    @Value("${app.event-calendar-import.base-url:https://patrunning.com}")
     private String baseUrl;
-    /** First run: only posts the source published within this many months are listed. */
-    @Value("${app.event-calendar-import.backfill-months:12}")
-    private int backfillMonths;
     /** Default horizon (months ahead) until an admin picks one in the back office. */
     @Value("${app.event-calendar-import.horizon-months:12}")
     private int defaultHorizonMonths;
-    /** Pause between requests to the source site so a backfill doesn't hammer it. */
+    /** Pause between requests to the source site. */
     @Value("${app.event-calendar-import.request-delay-ms:400}")
     private long requestDelayMs;
-    /** Upper bound per run; whatever is left continues on the next run via the watermark. */
+    /** Upper bound of races saved per run, a guard against a page that suddenly lists far too much. */
     @Value("${app.event-calendar-import.max-events-per-run:2000}")
     private int maxEventsPerRun;
 
@@ -166,7 +164,6 @@ public class EventCalendarImportServiceImpl implements EventCalendarImportServic
                 .horizonMonths(readHorizon())
                 .source(source)
                 .sourceUrl(baseUrl)
-                .watermark(readWatermark().orElse(null))
                 .lastRun(readLastRun().orElse(null))
                 .currentRun(running.get() ? currentRun : null)
                 .pendingCount(eventCalendarRepository.countBySourceAndIsApprovedIsNull(source))
@@ -190,7 +187,8 @@ public class EventCalendarImportServiceImpl implements EventCalendarImportServic
         }
         int horizon = clampHorizon(horizonMonths == null ? readHorizon() : horizonMonths);
         EventCalendarImportResult result = EventCalendarImportResult.builder()
-                .startedAt(OffsetDateTime.now())
+                .mode("MONTHLY")
+                .startedAt(OffsetDateTime.now().truncatedTo(ChronoUnit.SECONDS))
                 .horizonMonths(horizon)
                 .build();
         currentRun = result;
@@ -203,16 +201,14 @@ public class EventCalendarImportServiceImpl implements EventCalendarImportServic
                 long removed = clearImportedRows();
                 result.setCleared((int) Math.min(removed, Integer.MAX_VALUE));
             }
-            Optional<OffsetDateTime> watermark = readWatermark();
-            result.setMode(watermark.isPresent() ? "INCREMENTAL" : "BACKFILL");
-            log.info("EventCalendar import started: mode={} source={} horizon={}m clearFirst={} watermark={}",
-                    result.getMode(), source, horizon, clearFirst, watermark.orElse(null));
-            runImport(watermark.orElse(null), horizon, result);
+            log.info("EventCalendar import started: source={} horizon={}m clearFirst={}", source, horizon,
+                    clearFirst);
+            runImport(horizon, result);
         } catch (Exception e) {
             log.error("EventCalendar import aborted", e);
             result.setError(abbreviate(e.getClass().getSimpleName() + ": " + e.getMessage(), 80));
         } finally {
-            result.setFinishedAt(OffsetDateTime.now());
+            result.setFinishedAt(OffsetDateTime.now().truncatedTo(ChronoUnit.SECONDS));
             result.setStopped(stopRequested.getAndSet(false));
             writeLastRun(result);
             currentRun = null;
@@ -222,7 +218,7 @@ public class EventCalendarImportServiceImpl implements EventCalendarImportServic
         if (result.getCreated() > 0) {
             notificationService.notifyAdmins(NotificationType.EVENT_CALENDAR_IMPORTED,
                     "ดึงปฏิทินงานวิ่งจาก " + source,
-                    "มีงานใหม่ " + result.getCreated() + " รายการรออนุมัติ",
+                    "มีงานใหม่ " + result.getCreated() + " รายการขึ้นปฏิทินแล้ว",
                     "/eventCalendarList");
         }
         return result;
@@ -240,295 +236,285 @@ public class EventCalendarImportServiceImpl implements EventCalendarImportServic
         }
     }
 
+    /** Every imported row, whichever site it came from, so rows of a retired source go too. */
     private long clearImportedRows() {
-        long removed = eventCalendarRepository.deleteBySource(source);
-        appConfigRepository.findFirstByName(CFG_WATERMARK).ifPresent(appConfigRepository::delete);
-        log.info("EventCalendar import: cleared {} imported rows and reset the watermark", removed);
+        long removed = eventCalendarRepository.deleteImported();
+        log.info("EventCalendar import: cleared {} imported rows", removed);
         return removed;
     }
 
-    private void runImport(OffsetDateTime watermark, int horizonMonths, EventCalendarImportResult result)
-            throws InterruptedException {
-        Map<Integer, String> categories = fetchCategories();
+    private void runImport(int horizonMonths, EventCalendarImportResult result) throws InterruptedException {
         List<String> provinces = loadProvinceNames();
-        LocalDate today = LocalDate.now(SOURCE_ZONE);
-        LocalDate horizon = today.plusMonths(horizonMonths);
+        YearMonth first = YearMonth.now(SOURCE_ZONE);
+        YearMonth last = YearMonth.from(LocalDate.now(SOURCE_ZONE).plusMonths(horizonMonths));
+        LocalDate windowStart = first.atDay(1);
+        LocalDate windowEnd = last.atEndOfMonth();
 
-        // The watermark may only move up to just before the earliest failed item, so the next run
-        // retries it; this keeps working whatever order the listing is walked in.
-        OffsetDateTime maxOk = null;
-        OffsetDateTime earliestFailed = null;
-        int processed = 0;
-        int page = 1;
-        int totalPages = 1;
-
-        while (page <= totalPages && processed < maxEventsPerRun && !stopRequested.get()) {
-            ResponseEntity<String> listing = http.exchange(listingUri(watermark, page), HttpMethod.GET,
-                    new HttpEntity<>(new HttpHeaders()), String.class);
-            String totalHeader = listing.getHeaders().getFirst("X-WP-TotalPages");
-            if (totalHeader != null) {
-                totalPages = Integer.parseInt(totalHeader.trim());
-            }
-            String totalCount = listing.getHeaders().getFirst("X-WP-Total");
-            if (totalCount != null) {
-                result.setTotal(Math.min(Integer.parseInt(totalCount.trim()), maxEventsPerRun));
-            }
-            JsonNode items = readJson(listing.getBody());
-            if (items == null || !items.isArray()) {
-                throw new IllegalStateException("Unexpected listing response from " + source);
-            }
-
-            for (JsonNode item : items) {
-                if (processed >= maxEventsPerRun || stopRequested.get()) {
-                    break;
-                }
-                processed++;
-                result.setListed(result.getListed() + 1);
-                OffsetDateTime modified = parseGmt(item.path("modified_gmt").asText(null));
-                boolean ok = false;
-                try {
-                    ok = importOne(item, categories, provinces, today, horizon, result);
-                } catch (Exception e) {
-                    log.warn("EventCalendar import: event {} failed: {}", item.path("id").asText(), e.toString());
-                }
-                if (!ok) {
-                    result.setFailed(result.getFailed() + 1);
-                    if (modified != null && (earliestFailed == null || modified.isBefore(earliestFailed))) {
-                        earliestFailed = modified;
-                    }
-                } else if (modified != null && (maxOk == null || modified.isAfter(maxOk))) {
-                    maxOk = modified;
-                }
-                if (processed % 50 == 0) {
-                    log.info("EventCalendar import progress: {}/{} created={} updated={} skipped={} failed={}",
-                            result.getListed(), result.getTotal(), result.getCreated(), result.getUpdated(),
-                            result.getSkipped(), result.getFailed());
-                }
+        // 1. Read every month first: the total is known before saving starts, and rows the source
+        // dropped may only be removed when no page was missed.
+        Map<String, Card> cards = new LinkedHashMap<>();
+        boolean complete = true;
+        for (YearMonth ym = first; !ym.isAfter(last) && !stopRequested.get(); ym = ym.plusMonths(1)) {
+            try {
+                List<Card> month = parseMonth(fetch(monthUri(ym, null)));
                 Thread.sleep(requestDelayMs);
+                Set<String> trail = new HashSet<>();
+                parseMonth(fetch(monthUri(ym, "trail-run"))).forEach(c -> trail.add(c.sourceId));
+                Thread.sleep(requestDelayMs);
+                for (Card c : month) {
+                    c.trail = trail.contains(c.sourceId);
+                    // A race spanning months is listed again as "ongoing"; its first sighting wins.
+                    cards.putIfAbsent(c.sourceId, c);
+                }
+                log.info("EventCalendar import: {} lists {} races ({} trail)", ym, month.size(), trail.size());
+            } catch (InterruptedException e) {
+                throw e;
+            } catch (Exception e) {
+                complete = false;
+                result.setFailed(result.getFailed() + 1);
+                log.warn("EventCalendar import: month {} failed: {}", ym, e.toString());
             }
-            page++;
+        }
+        if (stopRequested.get()) {
+            complete = false;
         }
 
-        OffsetDateTime newWatermark = maxOk;
-        if (earliestFailed != null && (newWatermark == null || !earliestFailed.isAfter(newWatermark))) {
-            newWatermark = earliestFailed.minusSeconds(1);
+        List<Card> inWindow = cards.values().stream()
+                .filter(c -> c.eventDate != null && !c.eventDate.isBefore(windowStart)
+                        && !c.eventDate.isAfter(windowEnd))
+                .limit(maxEventsPerRun)
+                .toList();
+        result.setSkipped(cards.size() - inWindow.size());
+        result.setTotal(inWindow.size());
+
+        // 2. Upsert.
+        OffsetDateTime seenAt = OffsetDateTime.now();
+        Set<String> seen = new HashSet<>();
+        for (Card card : inWindow) {
+            if (stopRequested.get()) {
+                complete = false;
+                break;
+            }
+            result.setListed(result.getListed() + 1);
+            seen.add(card.sourceId);
+            try {
+                upsert(card, provinces, seenAt, result);
+            } catch (Exception e) {
+                result.setFailed(result.getFailed() + 1);
+                log.warn("EventCalendar import: race {} failed: {}", card.sourceId, e.toString());
+            }
         }
-        if (newWatermark != null && (watermark == null || newWatermark.isAfter(watermark))) {
-            writeWatermark(newWatermark);
+
+        // 3. Drop what the source no longer lists in the window we just read in full.
+        if (complete && !inWindow.isEmpty()) {
+            List<EventCalendar> gone = eventCalendarRepository
+                    .findBySourceAndEventDateBetween(source, windowStart.atStartOfDay(SOURCE_ZONE).toOffsetDateTime(),
+                            windowEnd.plusDays(1).atStartOfDay(SOURCE_ZONE).toOffsetDateTime().minusNanos(1))
+                    .stream()
+                    .filter(row -> !seen.contains(row.getSourceId()))
+                    .toList();
+            if (!gone.isEmpty()) {
+                eventCalendarRepository.deleteAll(gone);
+                result.setRemoved(gone.size());
+                log.info("EventCalendar import: removed {} races the source no longer lists", gone.size());
+            }
         }
     }
 
-    /** @return true when the event was created, updated or deliberately skipped; false on failure. */
-    private boolean importOne(JsonNode item, Map<Integer, String> categories, List<String> provinces,
-            LocalDate today, LocalDate horizon, EventCalendarImportResult result) {
-        String sourceId = item.path("id").asText(null);
-        String pageUrl = item.path("link").asText(null);
-        if (sourceId == null || pageUrl == null || !"publish".equals(item.path("status").asText("publish"))) {
-            return true;
-        }
-        String title = cleanTitle(item.path("title").path("rendered").asText(""));
-        List<String> categoryNames = new ArrayList<>();
-        for (JsonNode t : item.path("event_type")) {
-            String name = categories.get(t.asInt());
-            if (name != null) {
-                categoryNames.add(name);
-            }
-        }
-
-        String html = http.getForObject(URI.create(pageUrl), String.class);
-        if (html == null) {
-            return false;
-        }
-        ParsedPage parsed = parsePage(html);
-        if (parsed.eventDate == null) {
-            log.warn("EventCalendar import: no start date on {}", pageUrl);
-            return false;
-        }
-
-        Optional<EventCalendar> existing = eventCalendarRepository.findBySourceAndSourceId(source, sourceId);
-        boolean inWindow = !parsed.eventDate.isBefore(today) && !parsed.eventDate.isAfter(horizon);
-        if (existing.isEmpty() && !inWindow) {
-            result.setSkipped(result.getSkipped() + 1);
-            return true;
-        }
-
+    private void upsert(Card card, List<String> provinces, OffsetDateTime seenAt, EventCalendarImportResult result) {
+        Optional<EventCalendar> existing = eventCalendarRepository.findBySourceAndSourceId(source, card.sourceId);
         EventCalendar row = existing.orElseGet(() -> EventCalendar.builder()
                 .source(source)
-                .sourceId(sourceId)
-                .isApproved(null)
+                .sourceId(card.sourceId)
+                // The source is curated by its own team, so its races go straight onto the calendar;
+                // an admin can still reject one, and that decision survives later runs.
+                .isApproved(true)
                 .build());
-        row.setEventName(abbreviate(title.isBlank() ? parsed.title : title, COLUMN_MAX));
-        row.setEventDate(parsed.eventDate.atStartOfDay(SOURCE_ZONE).toOffsetDateTime());
-        row.setLocation(abbreviate(normaliseLocation(parsed.location, provinces), COLUMN_MAX));
-        row.setEventType(guessEventType(parsed.distance, categoryNames));
-        row.setExtraDetail(abbreviate(buildExtraDetail(parsed, categoryNames), COLUMN_MAX));
-        row.setLink(abbreviate(parsed.externalLink != null ? parsed.externalLink : pageUrl, COLUMN_MAX));
+        String before = fingerprint(row);
+        row.setEventName(abbreviate(card.title, COLUMN_MAX));
+        row.setEventDate(card.eventDate.atStartOfDay(SOURCE_ZONE).toOffsetDateTime());
+        row.setLocation(abbreviate(buildLocation(card.venue, card.province, provinces), COLUMN_MAX));
+        row.setEventType(guessEventType(String.join(" / ", card.distances),
+                card.trail ? List.of("เทรล") : List.of()));
+        row.setExtraDetail(abbreviate(buildExtraDetail(card), COLUMN_MAX));
+        row.setLink(fitUrl(card.registrationLink, card.pageUrl));
         // Submitter name / phone / email are for people who file an event themselves; an
         // imported row is identified by `source` instead.
-        row.setSourceUrl(abbreviate(pageUrl, COLUMN_MAX));
-        row.setSourceUpdatedAt(parseGmt(item.path("modified_gmt").asText(null)));
+        row.setSourceUrl(fitUrl(card.pageUrl, null));
+        if (existing.isPresent() && before.equals(fingerprint(row))) {
+            return;
+        }
+        row.setSourceUpdatedAt(seenAt);
         eventCalendarRepository.save(row);
-
         if (existing.isPresent()) {
             result.setUpdated(result.getUpdated() + 1);
         } else {
             result.setCreated(result.getCreated() + 1);
         }
-        return true;
+    }
+
+    private static String fingerprint(EventCalendar r) {
+        return String.join("\u0001", Objects.toString(r.getEventName()),
+                Objects.toString(r.getEventDate() == null ? null : r.getEventDate().toLocalDate()),
+                Objects.toString(r.getLocation()), Objects.toString(r.getEventType()),
+                Objects.toString(r.getExtraDetail()), Objects.toString(r.getLink()),
+                Objects.toString(r.getSourceUrl()));
     }
 
     // ------------------------------------------------------------------ source access
 
-    private URI listingUri(OffsetDateTime watermark, int page) {
+    URI monthUri(YearMonth ym, String type) {
         UriComponentsBuilder b = UriComponentsBuilder.fromHttpUrl(baseUrl)
-                .path("/wp-json/wp/v2/ajde_events")
-                .queryParam("per_page", PAGE_SIZE)
-                .queryParam("page", page)
-                // Backfill walks newest posts first so upcoming races show up within minutes;
-                // incremental runs walk oldest change first.
-                .queryParam("orderby", watermark != null ? "modified" : "date")
-                .queryParam("order", watermark != null ? "asc" : "desc")
-                .queryParam("status", "publish")
-                .queryParam("_fields", "id,link,modified_gmt,title,event_type,status");
-        if (watermark != null) {
-            // WP compares against post_modified in the site's own timezone; an hour of overlap
-            // costs a few re-fetches and guards against clock drift.
-            LocalDateTime local = watermark.minusHours(1).atZoneSameInstant(SOURCE_ZONE).toLocalDateTime();
-            b.queryParam("modified_after", local.format(WP_LOCAL));
-        } else {
-            LocalDateTime cutoff = LocalDateTime.now(SOURCE_ZONE).minusMonths(backfillMonths);
-            b.queryParam("after", cutoff.format(WP_LOCAL));
+                .pathSegment(MONTH_PATH, ym.toString())
+                .path("/");
+        if (type != null) {
+            b.queryParam("pr_type", type);
         }
-        return b.build(true).toUri();
+        return b.encode().build().toUri();
     }
 
-    private Map<Integer, String> fetchCategories() {
-        Map<Integer, String> map = new HashMap<>();
-        try {
-            URI uri = UriComponentsBuilder.fromHttpUrl(baseUrl).path("/wp-json/wp/v2/event_type")
-                    .queryParam("per_page", 100).queryParam("_fields", "id,name").build(true).toUri();
-            JsonNode terms = readJson(http.getForObject(uri, String.class));
-            if (terms != null) {
-                for (JsonNode t : terms) {
-                    map.put(t.path("id").asInt(), HtmlUtils.htmlUnescape(t.path("name").asText("")));
-                }
-            }
-        } catch (Exception e) {
-            log.warn("EventCalendar import: could not load categories: {}", e.toString());
+    private String fetch(URI uri) {
+        String html = http.getForObject(uri, String.class);
+        // An empty month still renders the month template; without it the layout has changed and
+        // reading "no races" from it would wipe the month.
+        if (html == null || !html.contains("pr-next--month")) {
+            throw new IllegalStateException("Unexpected page from " + uri);
         }
-        return map;
-    }
-
-    private JsonNode readJson(String body) {
-        if (body == null) {
-            return null;
-        }
-        try {
-            return objectMapper.readTree(body);
-        } catch (Exception e) {
-            throw new IllegalStateException("Invalid JSON from " + source, e);
-        }
+        return html;
     }
 
     // ------------------------------------------------------------------ page parsing
 
-    static final class ParsedPage {
+    static final class Card {
+        String sourceId;
+        String pageUrl;
         String title;
         LocalDate eventDate;
-        String location;
-        String distance;
-        String organizer;
-        String phone;
-        String externalLink;
+        List<String> distances = new ArrayList<>();
+        String province;
+        String venue;
+        String registrationLink;
+        boolean free;
+        boolean trail;
     }
 
-    static ParsedPage parsePage(String html) {
-        ParsedPage p = new ParsedPage();
-
-        Matcher m = P_START_DATE.matcher(html);
-        if (m.find()) {
-            p.eventDate = parseLooseDate(m.group(1));
-        }
-        if (p.eventDate == null) {
-            m = P_DATA_TIME.matcher(html);
-            if (m.find()) {
-                long epoch = Long.parseLong(m.group(1));
-                p.eventDate = OffsetDateTime.ofInstant(java.time.Instant.ofEpochSecond(epoch), SOURCE_ZONE)
-                        .toLocalDate();
-            }
-        }
-
-        m = P_SUBTITLE.matcher(html);
-        if (m.find()) {
-            parseSubtitle(cleanText(HtmlUtils.htmlUnescape(P_TAG.matcher(m.group(1)).replaceAll(" "))), p);
-        }
-
-        m = P_ANCHOR.matcher(html);
+    static List<Card> parseMonth(String html) {
+        TreeMap<Integer, String> blocks = new TreeMap<>();
+        Matcher m = P_BLOCK.matcher(html);
         while (m.find()) {
-            String tag = m.group();
-            if (tag.contains("desc_trig") && tag.contains("data-exlk=\"1\"")) {
-                Matcher h = P_HREF.matcher(tag);
-                if (h.find()) {
-                    String href = HtmlUtils.htmlUnescape(h.group(1)).trim();
-                    if (href.startsWith("http")) {
-                        p.externalLink = href;
-                    }
-                }
-                break;
+            blocks.put(m.start(), m.group(1));
+        }
+        List<Card> cards = new ArrayList<>();
+        m = P_ARTICLE.matcher(html);
+        while (m.find()) {
+            Map.Entry<Integer, String> block = blocks.floorEntry(m.start());
+            Card c = parseCard(m.group(1), m.group(2), block == null ? null : block.getValue());
+            if (c != null) {
+                cards.add(c);
             }
         }
-        return p;
+        return cards;
     }
 
-    /** "📌venue จ.สตูล 🏃ประเภท 5.5 👥ผู้จัด บ้านทุ่งนุ้ย 📞เบอร์โทร. 08x" → fields. */
-    static void parseSubtitle(String text, ParsedPage p) {
-        String t = cleanText(P_EMOJI.matcher(text).replaceAll(" "));
-        TreeMap<Integer, String> markers = new TreeMap<>();
-        for (String marker : SUBTITLE_MARKERS) {
-            int i = t.indexOf(marker);
-            if (i >= 0) {
-                markers.put(i, marker);
-            }
-        }
-        p.location = cleanText(markers.isEmpty() ? t : t.substring(0, markers.firstKey()));
-        Integer[] starts = markers.keySet().toArray(new Integer[0]);
-        for (int i = 0; i < starts.length; i++) {
-            String marker = markers.get(starts[i]);
-            int from = starts[i] + marker.length();
-            int to = i + 1 < starts.length ? starts[i + 1] : t.length();
-            String value = cleanText(t.substring(from, to).replaceFirst("^[\\s.:：]+", ""));
-            switch (marker) {
-                case "ประเภท" -> p.distance = value;
-                case "ผู้จัด" -> p.organizer = value;
-                case "เบอร์โทร" -> p.phone = value;
-                default -> {
-                }
-            }
-        }
-    }
-
-    static LocalDate parseLooseDate(String raw) {
-        Matcher m = P_LOOSE_ISO.matcher(raw);
-        if (!m.find()) {
+    /** @param blockId "2026-12-05" for a day block, "ongoing" for races that started earlier. */
+    static Card parseCard(String classes, String body, String blockId) {
+        Matcher t = P_TITLE.matcher(body);
+        if (!t.find()) {
             return null;
         }
+        Card c = new Card();
+        c.pageUrl = HtmlUtils.htmlUnescape(t.group(1)).trim();
+        Matcher slug = P_EVENT_SLUG.matcher(c.pageUrl);
+        if (!slug.find()) {
+            return null;
+        }
+        c.sourceId = abbreviate(decodeUrl(slug.group(1)), COLUMN_MAX);
+        c.title = cleanTitle(t.group(2));
+        c.free = classes.contains("is-free");
+
+        Matcher chip = P_CHIP.matcher(body);
+        while (chip.find()) {
+            String d = text(chip.group(1));
+            if (!d.isEmpty()) {
+                c.distances.add(d);
+            }
+        }
+
+        String dateText = null;
+        Matcher meta = P_META.matcher(body);
+        if (meta.find()) {
+            String mh = meta.group(1);
+            Matcher x = P_META_DATE.matcher(mh);
+            dateText = x.find() ? text(x.group(1)) : null;
+            x = P_META_PROVINCE.matcher(mh);
+            c.province = x.find() ? text(x.group(1)) : null;
+            x = P_META_VENUE.matcher(mh);
+            c.venue = x.find() ? text(x.group(1)) : null;
+        }
+        if (blockId != null && P_DAY_ID.matcher(blockId).matches()) {
+            c.eventDate = LocalDate.parse(blockId);
+        } else if (dateText != null) {
+            c.eventDate = parseThaiStartDate(dateText);
+        }
+
+        Matcher cta = P_CTA.matcher(body);
+        if (cta.find()) {
+            String href = HtmlUtils.htmlUnescape(cta.group(1)).trim();
+            // Links back into patrunning itself are its own ads (e.g. hotel rooms), not registration.
+            if (href.startsWith("http") && !hostOf(href).endsWith("patrunning.com")) {
+                c.registrationLink = href;
+            }
+        }
+        return c;
+    }
+
+    /** "5 ธ.ค. 2026", "5–6 ธ.ค. 2026", "31 ต.ค. – 13 ธ.ค. 2026", "1 ก.ค. 2026 – 31 ธ.ค. 2027" → start date. */
+    static LocalDate parseThaiStartDate(String text) {
+        if (text == null) {
+            return null;
+        }
+        String[] ends = text.split("\\s*[–—-]\\s*", 2);
+        int[] start = datePart(ends[0]);
+        int[] end = ends.length > 1 ? datePart(ends[1]) : null;
+        if (start == null) {
+            return null;
+        }
+        int month = start[1] > 0 ? start[1] : end == null ? 0 : end[1];
+        int year = start[2] > 0 ? start[2] : end == null ? 0 : end[2];
+        if (month == 0 || year == 0) {
+            return null;
+        }
+        // "30 ธ.ค. – 2 ม.ค. 2027" starts in the year before the one written.
+        if (start[2] == 0 && end != null && end[1] > 0 && month > end[1]) {
+            year--;
+        }
         try {
-            return LocalDate.of(Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2)),
-                    Integer.parseInt(m.group(3)));
+            return LocalDate.of(year, month, start[0]);
         } catch (Exception e) {
             return null;
         }
     }
 
-    static OffsetDateTime parseGmt(String raw) {
-        if (raw == null || raw.isBlank()) {
+    /** @return {day, month or 0, year or 0}, or null when no day is found. */
+    private static int[] datePart(String s) {
+        Matcher m = P_DATE_PART.matcher(s.trim());
+        if (!m.lookingAt()) {
             return null;
         }
-        try {
-            return LocalDateTime.parse(raw, WP_LOCAL).atOffset(ZoneOffset.UTC);
-        } catch (Exception e) {
-            return null;
+        int month = 0;
+        if (m.group(2) != null) {
+            for (int i = 0; i < THAI_MONTHS.length; i++) {
+                if (THAI_MONTHS[i].equals(m.group(2))) {
+                    month = i + 1;
+                    break;
+                }
+            }
         }
+        int year = m.group(3) == null ? 0 : Integer.parseInt(m.group(3));
+        if (year > 2400) {
+            year -= 543; // Buddhist era
+        }
+        return new int[] { Integer.parseInt(m.group(1)), month, year };
     }
 
     /** Maps the source's free-text distances onto our eventType options. */
@@ -563,9 +549,23 @@ public class EventCalendarImportServiceImpl implements EventCalendarImportServic
     }
 
     /**
-     * The public calendar filters by province with {@code location LIKE %stateLocal%}, so make sure
-     * the province's full name is in the text when the source only abbreviated it.
+     * Venue plus province. The public calendar filters by province with
+     * {@code location LIKE %stateLocal%}, so the province's full name must be in the text.
      */
+    static String buildLocation(String venue, String province, List<String> provinces) {
+        String v = venue == null ? "" : venue;
+        String p = province == null ? "" : province;
+        String loc;
+        if (v.isEmpty()) {
+            loc = p;
+        } else if (p.isEmpty() || v.contains(p)) {
+            loc = v;
+        } else {
+            loc = v + " · " + p;
+        }
+        return normaliseLocation(loc, provinces);
+    }
+
     static String normaliseLocation(String location, List<String> provinces) {
         if (location == null || location.isBlank()) {
             return null;
@@ -579,16 +579,13 @@ public class EventCalendarImportServiceImpl implements EventCalendarImportServic
     }
 
     /** Distances and the free-race flag only; organizer contact details are deliberately left out. */
-    static String buildExtraDetail(ParsedPage p, List<String> categoryNames) {
+    static String buildExtraDetail(Card c) {
         List<String> parts = new ArrayList<>();
-        if (p.distance != null && !p.distance.isBlank()) {
-            parts.add("ประเภท: " + p.distance);
+        if (!c.distances.isEmpty()) {
+            parts.add("ประเภท: " + String.join(" / ", c.distances));
         }
-        for (String c : categoryNames) {
-            if (c.contains("ฟรี")) {
-                parts.add("งานวิ่งฟรี");
-                break;
-            }
+        if (c.free) {
+            parts.add("งานวิ่งฟรี");
         }
         return parts.isEmpty() ? null : String.join(" · ", parts);
     }
@@ -608,22 +605,36 @@ public class EventCalendarImportServiceImpl implements EventCalendarImportServic
         return names;
     }
 
-    /** WordPress title → plain race name: unescaped, promo {@code <font>} notes and any other tags removed. */
+    /**
+     * Card title → plain race name. The source appends notes such as "(🎁สมัครฟรี!) 📢เปิดรับสมัคร
+     * วันที่ …" after the name; the free flag is kept separately, so everything from the first
+     * 🎁 / 📢 note on is cut.
+     */
     static String cleanTitle(String rendered) {
         if (rendered == null) {
             return null;
         }
-        String s = HtmlUtils.htmlUnescape(rendered);
-        s = P_FONT_NOTE.matcher(s).replaceAll(" ");
-        s = P_TAG.matcher(s).replaceAll(" ");
-        return cleanText(s);
+        String s = cleanText(HtmlUtils.htmlUnescape(P_TAG.matcher(rendered).replaceAll(" ")).replace("​", ""));
+        int cut = s.length();
+        for (String marker : new String[] { "(🎁", "🎁", "📢" }) {
+            int i = s.indexOf(marker);
+            if (i > 0) {
+                cut = Math.min(cut, i);
+            }
+        }
+        String name = cleanText(s.substring(0, cut));
+        return name.isEmpty() ? s : name;
+    }
+
+    private static String text(String html) {
+        return cleanText(HtmlUtils.htmlUnescape(P_TAG.matcher(html).replaceAll(" ")));
     }
 
     static String cleanText(String s) {
         if (s == null) {
             return null;
         }
-        return P_WS.matcher(s.replace(' ', ' ')).replaceAll(" ").trim();
+        return P_WS.matcher(s.replace(' ', ' ')).replaceAll(" ").trim();
     }
 
     static String abbreviate(String s, int max) {
@@ -631,6 +642,42 @@ public class EventCalendarImportServiceImpl implements EventCalendarImportServic
             return s;
         }
         return s.substring(0, max - 1) + "…";
+    }
+
+    /** Percent-encoded Thai → readable text (browsers accept either), "+" kept literal. */
+    static String decodeUrl(String url) {
+        try {
+            return URLDecoder.decode(url.replace("+", "%2B"), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return url;
+        }
+    }
+
+    /**
+     * Fits a URL into a varchar(255) without cutting it: an encoded Thai URL is often too long
+     * as-is but fits once decoded. Falls back to {@code fallback} when neither form fits.
+     */
+    static String fitUrl(String url, String fallback) {
+        if (url == null) {
+            return fallback == null ? null : fitUrl(fallback, null);
+        }
+        if (url.length() <= COLUMN_MAX) {
+            return url;
+        }
+        String decoded = decodeUrl(url);
+        if (decoded.length() <= COLUMN_MAX && !decoded.contains(" ")) {
+            return decoded;
+        }
+        return fallback == null ? null : fitUrl(fallback, null);
+    }
+
+    private static String hostOf(String url) {
+        try {
+            String host = URI.create(url.replace(" ", "%20")).getHost();
+            return host == null ? "" : host.toLowerCase();
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     // ------------------------------------------------------------------ appConfig state
@@ -645,17 +692,6 @@ public class EventCalendarImportServiceImpl implements EventCalendarImportServic
                 .filter(v -> v != null && v.matches("\\d+"))
                 .map(v -> clampHorizon(Integer.parseInt(v)))
                 .orElse(clampHorizon(defaultHorizonMonths));
-    }
-
-    private Optional<OffsetDateTime> readWatermark() {
-        return appConfigRepository.findFirstByName(CFG_WATERMARK)
-                .map(AppConfig::getValue)
-                .filter(v -> v != null && !v.isBlank())
-                .map(OffsetDateTime::parse);
-    }
-
-    private void writeWatermark(OffsetDateTime value) {
-        writeConfig(CFG_WATERMARK, value.toString());
     }
 
     private Optional<EventCalendarImportResult> readLastRun() {

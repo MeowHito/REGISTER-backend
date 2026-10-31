@@ -97,10 +97,9 @@ app:
   # (see EventCalendarImportServiceImpl). Imported rows wait for admin approval.
   event-calendar-import:
     enabled: ${EVENT_CALENDAR_IMPORT_ENABLED:true}
-    source: joggingandrunning.com
-    base-url: https://www.joggingandrunning.com
-    backfill-months: ${EVENT_CALENDAR_IMPORT_BACKFILL_MONTHS:12}  # first run: only posts published within this window
-    horizon-months: ${EVENT_CALENDAR_IMPORT_HORIZON_MONTHS:12}    # keep races dated today .. today + horizon
+    source: patrunning.com
+    base-url: https://patrunning.com
+    horizon-months: ${EVENT_CALENDAR_IMPORT_HORIZON_MONTHS:12}    # read month pages from this month .. this month + horizon
     request-delay-ms: ${EVENT_CALENDAR_IMPORT_DELAY_MS:400}       # be polite to the source site
     max-events-per-run: ${EVENT_CALENDAR_IMPORT_MAX_PER_RUN:2000}
 

@@ -137,7 +137,7 @@ public class QuartzConfig {
     public JobDetail importEventCalendarJobDetail() {
         return JobBuilder.newJob(ImportEventCalendarJob.class)
                 .withIdentity(ImportEventCalendarJob.JOB_NAME)
-                .withDescription("Import upcoming races from joggingandrunning.com into the event calendar queue")
+                .withDescription("Import upcoming races from patrunning.com into the event calendar")
                 .storeDurably()
                 .build();
     }

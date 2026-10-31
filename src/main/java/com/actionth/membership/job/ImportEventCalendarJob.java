@@ -13,8 +13,8 @@ import com.actionth.membership.service.EventCalendarImportService;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Quartz job that pulls upcoming races from the external calendar site into the pending
- * event-calendar queue. Runs nightly and on demand from the back office ("sync now").
+ * Quartz job that pulls upcoming races from the external calendar site into the event
+ * calendar. Runs nightly and on demand from the back office ("sync now").
  */
 @Slf4j
 @Component

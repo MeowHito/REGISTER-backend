@@ -1,89 +1,127 @@
 package com.actionth.membership.service.impl;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.LocalDate;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
-import com.actionth.membership.service.impl.EventCalendarImportServiceImpl.ParsedPage;
+import com.actionth.membership.service.impl.EventCalendarImportServiceImpl.Card;
 
-/** Pure-parsing checks against the markup EventON renders on joggingandrunning.com. */
+/** Pure-parsing checks against the markup of patrunning.com's monthly calendar pages. */
 class EventCalendarImportParserTest {
 
-    private static final String PAGE = "<script type=\"application/ld+json\">{\"@context\": \"http://schema.org\",\"@type\": \"Event\","
-            + "\"name\": \"บ่อน้ำร้อนฟันรัน\",\"startDate\": \"2026-10-25T12:47+7:00\",\"endDate\": \"2026-10-25T12:47+7:00\"}</script>"
-            + "<p class=\"desc_trig_outter\"><a data-gmap_status=\"null\" data-exlk=\"1\"  target=\"_blank\" rel=\"noopener noreferrer\""
-            + "style=\"background-color: #4bb5d8;\" id=\"evc_1\" class=\"desc_trig gmaponload sin_val evcal_list_a\" data-ux_val=\"2\""
-            + " href=\"https://script.google.com/macros/s/abc/exec\" target=\"_blank\"  ><span class='evoet_title evcal_event_title'>บ่อน้ำร้อนฟันรัน</span>"
-            + "<span class='evcal_event_subtitle' >📌บ่อน้ำร้อนทุ่งนุ้ย จ.สตูล    🏃‍♀️‍➡️ประเภท   5.5/10.5    👥ผู้จัด    บ้านทุ่งนุ้ย    📞เบอร์โทร. 081-234-5678</span>"
-            + "</a></p>";
+    private static final String PAGE = "<body class=\"pr-next pr-next--month\">"
+            + "<details class=\"dayblock dayblock--fold dayblock--ongoing\" id=\"d-ongoing\"><summary><h2>เริ่มก่อนหน้านี้</h2></summary>"
+            + "<div class=\"pr-cards pr-cards--2\"><article class=\"pr-card pr-card--row is-text is-free\"><div class=\"pr-card__body\">"
+            + "<h3 class=\"pr-card__title\"><a href=\"https://patrunning.com/events/%e0%b8%8b%e0%b8%b4%e0%b8%95%e0%b8%b5%e0%b9%89%e0%b8%a3%e0%b8%b1%e0%b8%99/\">"
+            + "ซิตี้รัน มันส์ ฟัน เว่อร์ (ซีซั่น 5) Presented by TOYOTA (🎁สมัครฟรี! ไม่มีค่าใช้จ่าย) 📢เปิดรับสมัคร วันที่ 26 ตุลาคม 2569</a></h3>"
+            + "<div class=\"pr-card__row\"><span class=\"pr-chip-sm\">ซิตี้รัน</span></div>"
+            + "<div class=\"pr-card__meta\"><span>31 ต.ค. – 13 ธ.ค. 2026</span><span aria-hidden=\"true\">·</span><strong>กรุงเทพมหานคร</strong>"
+            + "<span class=\"pr-card__venue\">ทุกเสาร์-อาทิตย์  Week1 - Week4</span></div>"
+            + "<div class=\"pr-card__cta\"><a class=\"pr-btn pr-btn--sm\" href=\"https://www.facebook.com/amazingthailandcityrun\" target=\"_blank\">สมัคร</a></div>"
+            + "</div></article></div></details>"
+            + "<section class=\"dayblock\" id=\"d-2026-12-05\" aria-labelledby=\"d-2026-12-05-h\"><h2>วันเสาร์ที่ 5 ธ.ค. 2026 <small>2 งาน</small></h2>"
+            + "<div class=\"pr-cards pr-cards--2\"><article class=\"pr-card pr-card--row is-text\"><div class=\"pr-card__body\">"
+            + "<h3 class=\"pr-card__title\"><a href=\"https://patrunning.com/events/shanghai-marathon-2026-2/\">Shanghai Marathon 2026</a></h3>"
+            + "<div class=\"pr-card__row\"><span class=\"pr-chip-sm\">5K</span><span class=\"pr-chip-sm\">42.195K</span></div>"
+            + "<div class=\"pr-card__meta\"><span>5–6 ธ.ค. 2026</span><span aria-hidden=\"true\">·</span><strong>China</strong>"
+            + "<span class=\"pr-card__venue\">Jing&#039;an District, Shanghai, China</span></div>"
+            + "<div class=\"pr-card__cta\"><a class=\"pr-btn pr-btn--sm\" href=\"https://www.ahotu.com/event/shanghai-marathon\" target=\"_blank\">สมัคร</a></div>"
+            + "</div></article>"
+            + "<article class=\"pr-card pr-card--row is-text\"><div class=\"pr-card__body\">"
+            + "<h3 class=\"pr-card__title\"><a href=\"https://patrunning.com/events/buriram-marathon-2027/\">Buriram Marathon 2027</a></h3>"
+            + "<div class=\"pr-card__row\"><span class=\"pr-chip-sm\">10K</span></div>"
+            + "<div class=\"pr-card__meta\"><span>5 ธ.ค. 2026</span><span aria-hidden=\"true\">·</span><strong>บุรีรัมย์</strong>"
+            + "<span class=\"pr-card__venue\">ณ สนามช้างอารีนา จ.บุรีรัมย์</span></div>"
+            + "<div class=\"pr-card__cta\"><a class=\"pr-btn pr-btn--sm\" href=\"https://patrunning.com/hotel-ad/26981/\" target=\"_blank\">สมัคร</a></div>"
+            + "</div></article></div></section></body>";
 
     @Test
-    void parsesDateSubtitleAndRegistrationLink() {
-        ParsedPage p = EventCalendarImportServiceImpl.parsePage(PAGE);
-        assertEquals(LocalDate.of(2026, 10, 25), p.eventDate);
-        assertEquals("บ่อน้ำร้อนทุ่งนุ้ย จ.สตูล", p.location);
-        assertEquals("5.5/10.5", p.distance);
-        assertEquals("บ้านทุ่งนุ้ย", p.organizer);
-        assertEquals("081-234-5678", p.phone);
-        assertEquals("https://script.google.com/macros/s/abc/exec", p.externalLink);
+    void parsesCardsWithDayBlockDates() {
+        List<Card> cards = EventCalendarImportServiceImpl.parseMonth(PAGE);
+        assertEquals(3, cards.size());
+
+        Card shanghai = cards.get(1);
+        assertEquals("shanghai-marathon-2026-2", shanghai.sourceId);
+        assertEquals("Shanghai Marathon 2026", shanghai.title);
+        assertEquals(LocalDate.of(2026, 12, 5), shanghai.eventDate);
+        assertEquals(List.of("5K", "42.195K"), shanghai.distances);
+        assertEquals("China", shanghai.province);
+        assertEquals("Jing'an District, Shanghai, China", shanghai.venue);
+        assertEquals("https://www.ahotu.com/event/shanghai-marathon", shanghai.registrationLink);
+        assertFalse(shanghai.free);
     }
 
     @Test
-    void subtitleWithoutPhoneOrOrganizer() {
-        ParsedPage p = new ParsedPage();
-        EventCalendarImportServiceImpl.parseSubtitle("📌ณ สวนหลวง ร.9  ประตู 4   🏃‍♀️‍➡️ประเภท   5/10   👥ผู้จัด   บริษัท มดยักษ์ใหญ่ จำกัด    📞เบอร์โทร.", p);
-        assertEquals("ณ สวนหลวง ร.9 ประตู 4", p.location);
-        assertEquals("5/10", p.distance);
-        assertEquals("บริษัท มดยักษ์ใหญ่ จำกัด", p.organizer);
-        assertEquals("", p.phone);
+    void ongoingCardTakesItsStartDateFromTheText() {
+        Card cityRun = EventCalendarImportServiceImpl.parseMonth(PAGE).get(0);
+        assertEquals("ซิตี้รัน", cityRun.sourceId);
+        assertEquals("ซิตี้รัน มันส์ ฟัน เว่อร์ (ซีซั่น 5) Presented by TOYOTA", cityRun.title);
+        assertEquals(LocalDate.of(2026, 10, 31), cityRun.eventDate);
+        assertTrue(cityRun.free);
+        assertEquals("ประเภท: ซิตี้รัน · งานวิ่งฟรี", EventCalendarImportServiceImpl.buildExtraDetail(cityRun));
+    }
+
+    @Test
+    void ignoresLinksBackIntoTheSourceSite() {
+        Card buriram = EventCalendarImportServiceImpl.parseMonth(PAGE).get(2);
+        assertNull(buriram.registrationLink);
+        assertEquals("https://patrunning.com/events/buriram-marathon-2027/", buriram.pageUrl);
+    }
+
+    @Test
+    void parsesThaiDateLines() {
+        assertEquals(LocalDate.of(2026, 12, 5), EventCalendarImportServiceImpl.parseThaiStartDate("5 ธ.ค. 2026"));
+        assertEquals(LocalDate.of(2026, 12, 4), EventCalendarImportServiceImpl.parseThaiStartDate("4–6 ธ.ค. 2026"));
+        assertEquals(LocalDate.of(2026, 6, 6), EventCalendarImportServiceImpl.parseThaiStartDate("6 มิ.ย. – 8 พ.ย. 2026"));
+        assertEquals(LocalDate.of(2026, 7, 1),
+                EventCalendarImportServiceImpl.parseThaiStartDate("1 ก.ค. 2026 – 31 ธ.ค. 2027"));
+        assertEquals(LocalDate.of(2026, 12, 30), EventCalendarImportServiceImpl.parseThaiStartDate("30 ธ.ค. – 2 ม.ค. 2027"));
+        assertEquals(LocalDate.of(2026, 3, 1), EventCalendarImportServiceImpl.parseThaiStartDate("1 มี.ค. 2569"));
+        assertNull(EventCalendarImportServiceImpl.parseThaiStartDate("เร็วๆ นี้"));
     }
 
     @Test
     void guessesEventTypeFromDistances() {
-        assertEquals("Mini Marathon", EventCalendarImportServiceImpl.guessEventType("5/10", List.of("งานวิ่ง")));
-        assertEquals("Marathon", EventCalendarImportServiceImpl.guessEventType("10.5 / 21.1 / 42.195", List.of()));
+        assertEquals("Mini Marathon", EventCalendarImportServiceImpl.guessEventType("5K / 10K", List.of()));
+        assertEquals("Marathon", EventCalendarImportServiceImpl.guessEventType("10.5K / 21.1K / 42.195K", List.of()));
         assertEquals("Half Marathon", EventCalendarImportServiceImpl.guessEventType("21K", List.of()));
-        assertEquals("Fun Run", EventCalendarImportServiceImpl.guessEventType("3.5", List.of()));
-        assertEquals("Trail", EventCalendarImportServiceImpl.guessEventType("12/25", List.of("งานวิ่งเทรล")));
-        assertNull(EventCalendarImportServiceImpl.guessEventType("", List.of("งานวิ่ง")));
+        assertEquals("Fun Run", EventCalendarImportServiceImpl.guessEventType("3.5K", List.of()));
+        assertEquals("Trail", EventCalendarImportServiceImpl.guessEventType("12K / 25K", List.of("เทรล")));
+        assertNull(EventCalendarImportServiceImpl.guessEventType("ซิตี้รัน", List.of()));
     }
 
     @Test
-    void appendsFullBangkokNameForProvinceFilter() {
-        List<String> provinces = List.of("กรุงเทพมหานคร", "สตูล");
+    void locationCarriesTheProvinceForTheFilter() {
+        List<String> provinces = List.of("กรุงเทพมหานคร", "บุรีรัมย์", "ลำพูน");
+        assertEquals("สวนรถไฟ · กรุงเทพมหานคร",
+                EventCalendarImportServiceImpl.buildLocation("สวนรถไฟ", "กรุงเทพมหานคร", provinces));
+        assertEquals("ณ เทศบาลตำบลก้อ อำเภอลี้ จังหวัดลำพูน",
+                EventCalendarImportServiceImpl.buildLocation("ณ เทศบาลตำบลก้อ อำเภอลี้ จังหวัดลำพูน", "ลำพูน", provinces));
+        assertEquals("บุรีรัมย์", EventCalendarImportServiceImpl.buildLocation(null, "บุรีรัมย์", provinces));
         assertEquals("สวนลุมพินี กรุงเทพฯ (กรุงเทพมหานคร)",
                 EventCalendarImportServiceImpl.normaliseLocation("สวนลุมพินี กรุงเทพฯ", provinces));
-        assertEquals("บ่อน้ำร้อน จ.สตูล", EventCalendarImportServiceImpl.normaliseLocation("บ่อน้ำร้อน จ.สตูล", provinces));
     }
 
     @Test
-    void extraDetailKeepsDistancesOnly() {
-        ParsedPage p = new ParsedPage();
-        p.distance = "5/10";
-        p.organizer = "บริษัท มดยักษ์ใหญ่ จำกัด";
-        p.phone = "081-234-5678";
-        assertEquals("ประเภท: 5/10 · งานวิ่งฟรี",
-                EventCalendarImportServiceImpl.buildExtraDetail(p, List.of("งานวิ่งฟรี")));
-    }
-
-    @Test
-    void parsesLooseIsoAndGmt() {
-        assertEquals(LocalDate.of(2027, 1, 31), EventCalendarImportServiceImpl.parseLooseDate("2027-1-31T13:17+7:00"));
-        assertEquals("2026-09-25T12:49:47Z", EventCalendarImportServiceImpl.parseGmt("2026-09-25T12:49:47").toString());
-    }
-
-    @Test
-    void titleDropsColouredPromoNote() {
-        assertEquals("CHIANGMAI CITY RUN DOG ROUTE SERIES (06:30 น.)",
-                EventCalendarImportServiceImpl.cleanTitle(
-                        "CHIANGMAI CITY RUN DOG ROUTE SERIES (06:30 น.) &lt;font style=\"color:#FF0000\"&gt;(🎁ลงทะเบียนฟรี !)&lt;/font&gt;"));
-        assertEquals("Bangkok Airways Chiang Mai Half Marathon 2026",
-                EventCalendarImportServiceImpl.cleanTitle(
-                        "Bangkok Airways Chiang Mai Half Marathon 2026 <font style=\"color:#FF0000\">(🎁ดาวน์โหลดรูปฟรี!)</font>"));
+    void titleDropsPromoNotes() {
+        assertEquals("Nan EcoTrail สวรรค์บนดอย STAGE1",
+                EventCalendarImportServiceImpl.cleanTitle("Nan Eco​Trail​ สวรรค์​บนดอย STAGE1(🎁วิ่งเทรลฟรี !) 📢เปิดรับสมัคร"));
+        assertEquals("KRAM & CRAFT",
+                EventCalendarImportServiceImpl.cleanTitle("KRAM &amp; CRAFT (🎁สมัครฟรี!) 📢เปิดรับสมัคร"));
         assertEquals("Pong Yaeng Trail 2026 ปีที่ 12", EventCalendarImportServiceImpl.cleanTitle("Pong Yaeng Trail 2026 ปีที่ 12"));
+    }
+
+    @Test
+    void longThaiUrlsAreStoredDecodedInsteadOfCut() {
+        String encoded = "https://patrunning.com/events/" + "%e0%b8%a7%e0%b8%b4%e0%b9%88%e0%b8%87".repeat(12) + "/";
+        String fitted = EventCalendarImportServiceImpl.fitUrl(encoded, null);
+        assertEquals("https://patrunning.com/events/" + "วิ่ง".repeat(12) + "/", fitted);
+        assertEquals("https://x.th/a", EventCalendarImportServiceImpl.fitUrl(null, "https://x.th/a"));
     }
 }
