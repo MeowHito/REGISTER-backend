@@ -68,6 +68,7 @@ public class SecurityConfiguration {
 			"/api/webhook/partner-2c2p",
 			"/api/webhook/mpay",
 			"/api/webhook/scb",
+			"/api/webhook/payment",
 			"/api/webhook/scb/get-payload",
 			"/api/log/**",
 	};

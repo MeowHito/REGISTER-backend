@@ -35,9 +35,10 @@ public class PaymentWebhookController {
     private ObjectMapper objectMapper;
 
     /**
-     * รับ webhook จาก SCB
+     * รับ webhook จาก SCB. Production registered "/payment" (hand-edited on the server
+     * 2026-10-30); "/scb" is kept so either callback URL works.
      */
-    @PostMapping("/scb")
+    @PostMapping({"/scb", "/payment"})
     public ResponseEntity<Map<String, Object>> receiveSCBCallback(@RequestBody Map<String, Object> payload) {
         try {
             Map<String, Object> response = webhookService.processSCBWebhook(payload);
