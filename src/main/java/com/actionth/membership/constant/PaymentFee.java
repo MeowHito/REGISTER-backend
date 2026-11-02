@@ -13,8 +13,11 @@ public final class PaymentFee {
 
     private PaymentFee() {}
 
-    private static final Set<String> QR_CHANNELS = Set.of("qrcode");
-    private static final Set<String> CARD_CHANNELS = Set.of("creditcard", "ewallet", "alipay", "wechatpay");
+    // mobilebanking (mPAY) is a bank transfer like PromptPay; linepay/shopeepay/paotang (mPAY)
+    // are wallets like the old 2C2P "ewallet".
+    private static final Set<String> QR_CHANNELS = Set.of("qrcode", "mobilebanking");
+    private static final Set<String> CARD_CHANNELS = Set.of("creditcard", "ewallet", "alipay", "wechatpay",
+            "linepay", "shopeepay", "paotang");
 
     /** Fee in percent (3 = 3%) for a payment method; 0 for free / unknown methods. */
     public static BigDecimal percentFor(String paymentMethod) {

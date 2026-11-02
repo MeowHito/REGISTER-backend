@@ -19,7 +19,12 @@ public class OrderUpdateResponse {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class PaymentData {
+        /** "MPAY" for mPAY payments; null for the legacy SCB / 2C2P flows. */
+        private String provider;
         private String paymentMethod;
+        /** Deep link into the wallet/bank app (mPAY LINE Pay, Paotang), when the gateway gives one. */
+        private String appPaymentUrl;
+        private String qrExpireAt;
         private String qrImage;
         private String webPaymentUrl;
         private String payload;

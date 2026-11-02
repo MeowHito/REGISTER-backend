@@ -68,6 +68,15 @@ public final class WebhookDescription {
             if (reasonType.contains(WebhookReasonType.TIMEOUT)) return DESC_2C2P_TIMEOUT;
             if (reasonType.contains(WebhookReasonType.FAILED)) return DESC_2C2P_FAILED;
         }
+        if (PaymentProvider.MPAY.equals(provider) && reasonType.startsWith(WebhookReasonType.MPAY_PREFIX)) {
+            String what = reasonType.substring(WebhookReasonType.MPAY_PREFIX.length());
+            return switch (what) {
+                case "REFUND" -> "mPAY refund was made for this order";
+                case "VOID" -> "mPAY payment was voided for this order";
+                case WebhookReasonType.FAILED -> "mPAY payment attempt failed";
+                default -> "mPAY event: " + what;
+            };
+        }
         return "Unexpected webhook event: " + reasonType;
     }
 }

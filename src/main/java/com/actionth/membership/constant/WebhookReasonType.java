@@ -12,6 +12,8 @@ public final class WebhookReasonType {
     public static final String PAYMENT_METHOD_MISMATCH = "PAYMENT_METHOD_MISMATCH";
     public static final String AMOUNT_MISMATCH = "AMOUNT_MISMATCH";
     public static final String UNKNOWN_PAYMENT_METHOD = "UNKNOWN_PAYMENT_METHOD";
+    /** mPAY reasons are MPAY_FAILED, MPAY_REFUND, MPAY_VOID. */
+    public static final String MPAY_PREFIX = "MPAY_";
 
     // --- 2C2P gateway categories ---
     public static final String CANCELLED = "CANCELLED";

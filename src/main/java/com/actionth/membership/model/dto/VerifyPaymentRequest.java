@@ -12,6 +12,7 @@ public class VerifyPaymentRequest {
      *   <li>{@code LINE_TRUEMONEY}— อีวอลเล็ท (LINE Pay, TrueMoney) → 2C2P inquiry</li>
      *   <li>{@code ALIPAY}        — Alipay+ → SCB eWallet inquiry</li>
      *   <li>{@code WECHAT_PAY}    — WeChatPay → SCB eWallet inquiry</li>
+     *   <li>{@code MPAY}          — any mPAY method → mPAY enquiry by {@code orderNo}</li>
      *   <li>{@code LOG_SETTLE}    — (internal) settle from webhook logs</li>
      * </ul>
      */

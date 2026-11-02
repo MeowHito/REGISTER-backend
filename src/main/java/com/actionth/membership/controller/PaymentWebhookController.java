@@ -7,7 +7,10 @@ import org.springframework.web.bind.annotation.*;
 
 import com.actionth.membership.model.Orders;
 import com.actionth.membership.repository.OrderRepository;
+import com.actionth.membership.service.MPayPaymentService;
 import com.actionth.membership.service.PaymentWebhookService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -24,6 +27,12 @@ public class PaymentWebhookController {
     
     @Autowired
     private OrderRepository orderRepository;
+
+    @Autowired
+    private MPayPaymentService mPayPaymentService;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     /**
      * รับ webhook จาก SCB
@@ -68,6 +77,32 @@ public class PaymentWebhookController {
             log.error("[2C2P] unexpected error while processing webhook", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Internal error: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+        }
+    }
+
+    /**
+     * รับ webhook จาก mPAY (spec §10). The URL is registered with mPAY, not sent per request.
+     * The body is read raw because the signature covers the exact bytes mPAY sent.
+     */
+    @PostMapping("/mpay")
+    public ResponseEntity<Map<String, Object>> receiveMPayCallback(
+            @RequestBody String rawBody,
+            @RequestHeader(value = "X-sdpg-nonce", required = false) String nonce,
+            @RequestHeader(value = "X-sdpg-signature", required = false) String signature,
+            @RequestHeader(value = "X-sdpg-merchant-id", required = false) String merchantId) {
+        if (!mPayPaymentService.verifySignature(rawBody, nonce, signature)) {
+            log.warn("[mPAY webhook] Rejected: bad or missing signature (merchantId={})", merchantId);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("status", "FAIL", "message", "invalid signature"));
+        }
+        try {
+            Map<String, Object> payload = objectMapper.readValue(rawBody, new TypeReference<Map<String, Object>>() {});
+            Map<String, Object> result = webhookService.processMPayResult(payload, rawBody, "WEBHOOK");
+            return ResponseEntity.ok(Map.of("status", "SUCCESS", "result", String.valueOf(result.get("status"))));
+        } catch (Exception e) {
+            log.error("[mPAY webhook] Error processing webhook: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("status", "FAIL", "message", "internal error"));
         }
     }
 

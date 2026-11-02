@@ -7,6 +7,8 @@ import lombok.Data;
 public class OrderUpdateRequest {
     private String orderId;
     private String paymentMethod;
+    /** Internet/Mobile Banking bank code (mPAY "mobilebanking" only), e.g. "004". */
+    private String bankCode;
     private Double couponDiscount;
     private String couponType;
     private String couponCode;

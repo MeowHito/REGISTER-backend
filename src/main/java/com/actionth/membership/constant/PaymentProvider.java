@@ -6,4 +6,5 @@ public final class PaymentProvider {
 
     public static final String SCB = "SCB";
     public static final String TWO_C2P = "2C2P";
+    public static final String MPAY = "MPAY";
 }

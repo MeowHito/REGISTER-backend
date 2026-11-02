@@ -428,6 +428,180 @@ public class PaymentWebhookService {
         }
     }
 
+    // ──────────────────────────────────────────────
+    // mPAY — webhook notify (spec §10) and enquiry (spec §8) share one settle path
+    // ──────────────────────────────────────────────
+
+    /**
+     * Settles an mPAY transaction result. The caller has already authenticated it: the webhook
+     * by its X-sdpg-signature, the enquiry because we fetched it from mPAY ourselves.
+     *
+     * @param source "WEBHOOK" or "ENQUIRY"
+     * @return map with "status": SUCCESS / REVIEW / PENDING / FAILED / IGNORED
+     */
+    public Map<String, Object> processMPayResult(Map<String, Object> payload, String jsonPayload, String source) {
+        String orderNo = resolveMPayOrderNo(payload);
+        String txnId = safeString(payload.get("txn_id"));
+        if (isBlank(orderNo)) {
+            log.warn("[mPAY {}] Cannot resolve orderNo: order_id={}, ref_1={}", source,
+                    payload.get("order_id"), payload.get("ref_1"));
+            safeSaveWebhookLog(jsonPayload, txnId, safeString(payload.get("order_id")), null,
+                    parseDouble(payload.get("amount")), safeString(payload.get("currency")),
+                    PaymentProvider.MPAY, WebhookLogType.ANOMALY, WebhookReasonType.UNKNOWN_STATUS);
+            return Map.of("ok", true, "status", "IGNORED");
+        }
+
+        String status = upperOrNull(safeString(payload.get("status")));
+        String txnType = firstNonBlank(upperOrNull(safeString(payload.get("txn_type"))), "PAYMENT");
+
+        return distributedLockService.executeWithLock(ORDER_PAY_LOCK_PREFIX + orderNo, () -> {
+            if ("WEBHOOK".equals(source) && !isBlank(txnId)
+                    && !tryClaimWebhook(PaymentProvider.MPAY, txnId + ":" + txnType + ":" + status)) {
+                log.info("[mPAY] Duplicate webhook txn={} {} {}, skipping", txnId, txnType, status);
+                Orders current = orderRepository.findByOrderNo(orderNo).orElse(null);
+                return Map.of("ok", true, "status",
+                        current != null ? safeString(current.getPaymentStatus()) : "IGNORED");
+            }
+            return settleMPay(payload, jsonPayload, source, orderNo, txnId, status, txnType);
+        });
+    }
+
+    private Map<String, Object> settleMPay(Map<String, Object> payload, String jsonPayload, String source,
+            String orderNo, String txnId, String status, String txnType) {
+        Double amount = parseDouble(payload.get("amount"));
+        String currency = safeString(payload.get("currency"));
+        Orders order = null;
+        String logType = WebhookLogType.WEBHOOK;
+        String reasonType = null;
+        boolean writeLog = true;
+
+        try {
+            order = orderRepository.findByOrderNo(orderNo).orElse(null);
+            if (order == null) {
+                log.warn("[mPAY {}] Order not found: orderNo={}, txn={}", source, orderNo, txnId);
+                logType = WebhookLogType.ANOMALY;
+                reasonType = WebhookReasonType.UNKNOWN_STATUS;
+                return Map.of("ok", true, "status", "IGNORED");
+            }
+
+            // Refunds and voids are made in the mPAY back office; record them, never touch the order.
+            if (!"PAYMENT".equals(txnType)) {
+                log.info("[mPAY {}] {} {} for orderNo={}, txn={}", source, txnType, status, orderNo, txnId);
+                logType = WebhookLogType.ANOMALY;
+                reasonType = WebhookReasonType.MPAY_PREFIX + txnType;
+                return Map.of("ok", true, "status", safeString(order.getPaymentStatus()));
+            }
+
+            String currentStatus = safeString(order.getPaymentStatus());
+            if (!PaymentStatus.PENDING.toString().equalsIgnoreCase(currentStatus)) {
+                boolean sameTxn = txnId != null && txnId.equals(order.getScbTransactionId());
+                if ("ENQUIRY".equals(source) || sameTxn || !"SUCCESS".equals(status)) {
+                    // Already settled by this very transaction (webhook + enquiry racing), or a
+                    // late failure notice: nothing new to record as an anomaly.
+                    writeLog = !"ENQUIRY".equals(source);
+                    return Map.of("ok", true, "status", currentStatus);
+                }
+                logType = WebhookLogType.ANOMALY;
+                reasonType = determineReasonType(currentStatus);
+                log.warn("[mPAY {}] Payment for non-pending order: orderNo={}, status={}, txn={}",
+                        source, orderNo, currentStatus, txnId);
+                return Map.of("ok", true, "status", currentStatus, "anomalyReasonType", reasonType);
+            }
+
+            if ("SUCCESS".equals(status)) {
+                String resolvedMethod = resolveMPayPaymentMethod(safeString(payload.get("sof_type")));
+                String currentMethod = order.getPaymentMethod();
+                if (resolvedMethod != null && !resolvedMethod.equalsIgnoreCase(currentMethod)) {
+                    log.warn("[mPAY {}] Method mismatch: orderNo={}, current={}, paid={}, txn={}. Blocking for review.",
+                            source, orderNo, currentMethod, resolvedMethod, txnId);
+                    order.setPaymentStatus(PaymentStatus.REVIEW.toString());
+                    order.setReviewReason(WebhookReasonType.PAYMENT_METHOD_MISMATCH);
+                    order.setScbTransactionId(txnId);
+                    orderRepository.save(order);
+                    logType = WebhookLogType.ANOMALY;
+                    reasonType = WebhookReasonType.PAYMENT_METHOD_MISMATCH;
+                    return Map.of("ok", true, "status", "REVIEW", "reason", reasonType);
+                }
+
+                // We send totalAmountWithFee as "amount" and mPAY's own customer fee is 0, so
+                // the two must agree to the satang.
+                if (amount == null || order.getTotalAmountWithFee() == null
+                        || Math.abs(amount - order.getTotalAmountWithFee()) >= 0.01) {
+                    log.warn("[mPAY {}] Amount mismatch: orderNo={}, expected={}, received={}, txn={}. Blocking for review.",
+                            source, orderNo, order.getTotalAmountWithFee(), amount, txnId);
+                    order.setPaymentStatus(PaymentStatus.REVIEW.toString());
+                    order.setReviewReason(WebhookReasonType.AMOUNT_MISMATCH);
+                    order.setScbTransactionId(txnId);
+                    orderRepository.save(order);
+                    logType = WebhookLogType.ANOMALY;
+                    reasonType = WebhookReasonType.AMOUNT_MISMATCH;
+                    return Map.of("ok", true, "status", "REVIEW", "reason", reasonType);
+                }
+
+                try {
+                    orderService.updatePaymentStatus(orderNo, txnId, PaymentStatus.SUCCESS);
+                } catch (Exception ex) {
+                    log.error("[mPAY {}] updatePaymentStatus(SUCCESS) error: {}", source, ex.getMessage(), ex);
+                    return Map.of("ok", true, "status", "PENDING");
+                }
+                try {
+                    Orders refreshed = orderRepository.findByOrderNo(orderNo).orElse(order);
+                    sendSuccessEmail(refreshed, txnId);
+                } catch (Exception ex) {
+                    log.error("[mPAY {}] sendSuccessEmail error: {}", source, ex.getMessage());
+                }
+                log.info("[mPAY {}] Settled orderNo={}, txn={}, amount={}", source, orderNo, txnId, amount);
+                return Map.of("ok", true, "status", "SUCCESS");
+            }
+
+            if ("FAIL".equals(status) || "FAILED".equals(status) || "CANCELED".equals(status)) {
+                // The order stays PENDING so the runner can try again before the due date.
+                log.info("[mPAY {}] Payment not successful: orderNo={}, code={}, message={}", source, orderNo,
+                        payload.get("status_code"), payload.get("status_message"));
+                logType = WebhookLogType.ANOMALY;
+                reasonType = WebhookReasonType.MPAY_PREFIX + WebhookReasonType.FAILED;
+                return Map.of("ok", true, "status", "FAILED");
+            }
+
+            // PENDING / AUTHORIZED (we always auto-capture) / anything new: wait for the next notice.
+            log.info("[mPAY {}] Status {} for orderNo={}, waiting", source, status, orderNo);
+            return Map.of("ok", true, "status", "PENDING");
+        } finally {
+            if (writeLog) {
+                safeSaveWebhookLog(jsonPayload, txnId, orderNo, order, amount, currency,
+                        PaymentProvider.MPAY, logType, reasonType);
+            }
+        }
+    }
+
+    /** Our orderNo: the first 14 characters of the attempt id we generated, else ref_1. */
+    private String resolveMPayOrderNo(Map<String, Object> payload) {
+        String orderId = trimToNull(safeString(payload.get("order_id")));
+        if (orderId != null && orderId.length() >= 14 && orderId.startsWith("OR")) {
+            return orderId.substring(0, 14);
+        }
+        return trimToNull(safeString(payload.get("ref_1")));
+    }
+
+    private String resolveMPayPaymentMethod(String sofType) {
+        if (sofType == null) {
+            return null;
+        }
+        return switch (sofType.trim().toUpperCase()) {
+            case "SOF_CC" -> "creditcard";
+            case "SOF_PROMPTPAY" -> "qrcode";
+            case "SOF_INTERNET_BANKING" -> "mobilebanking";
+            case "SOF_RLP" -> "linepay";
+            case "SOF_SHOPEEPAY" -> "shopeepay";
+            case "SOF_PAOTANG" -> "paotang";
+            default -> null;
+        };
+    }
+
+    private String upperOrNull(String s) {
+        return s == null ? null : s.trim().toUpperCase();
+    }
+
     public boolean verifyAndSettleFromLogs(String orderNo) {
         Orders order = orderRepository.findByOrderNo(orderNo).orElse(null);
         if (order == null)
@@ -979,8 +1153,10 @@ public class PaymentWebhookService {
      * Excludes ANOMALY entries to prevent settling based on failed payment logs.
      */
     private List<String> getWebhookPayloadsByOrderKey(String key) {
+        // mPAY logs settle through processMPayResult only (their "amount" alone proves nothing).
         List<String> payloads = webhookLogRepository.findByOrderNoAndLogType(key, WebhookLogType.WEBHOOK)
                 .stream()
+                .filter(l -> !PaymentProvider.MPAY.equalsIgnoreCase(l.getPaymentProvider()))
                 .map(PaymentWebhookLog::getPayloadJson)
                 .toList();
 
@@ -1138,6 +1314,9 @@ public class PaymentWebhookService {
                 return resolveScbPaymentMethod(safeString(map.get("billPaymentRef1")),
                         safeString(map.get("qrId")), map);
             }
+            if (PaymentProvider.MPAY.equalsIgnoreCase(provider)) {
+                return resolveMPayPaymentMethod(safeString(map.get("sof_type")));
+            }
             return resolve2c2pPaymentMethod(map);
         } catch (Exception e) {
             return null;
@@ -1151,6 +1330,11 @@ public class PaymentWebhookService {
         try {
             Map<String, Object> map = objectMapper.readValue(payloadJson,
                     new TypeReference<Map<String, Object>>() {});
+            if (PaymentProvider.MPAY.equalsIgnoreCase(provider)) {
+                String txnType = safeString(map.get("txn_type"));
+                return "SUCCESS".equalsIgnoreCase(safeString(map.get("status")))
+                        && (txnType == null || "PAYMENT".equalsIgnoreCase(txnType));
+            }
             return "0000".equals(safeString(map.get("respCode")));
         } catch (Exception e) {
             return false;

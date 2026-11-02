@@ -66,6 +66,7 @@ public class SecurityConfiguration {
 			"/api/gatewaypayment/qrcode",
 			"/api/gatewaypayment/verify-payment",
 			"/api/webhook/partner-2c2p",
+			"/api/webhook/mpay",
 			"/api/webhook/scb",
 			"/api/webhook/scb/get-payload",
 			"/api/log/**",

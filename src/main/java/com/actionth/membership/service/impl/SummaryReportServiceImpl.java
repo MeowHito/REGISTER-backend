@@ -104,7 +104,8 @@ public class SummaryReportServiceImpl implements SummaryReportService {
         if (paymentMethod == null || paymentMethod.trim().isEmpty())
             return BigDecimal.ZERO;
 
-        if ("QRCODE".equalsIgnoreCase(paymentMethod)) {
+        // Same split as constant/PaymentFee: bank transfers (PromptPay QR, mPAY Mobile Banking) 3%.
+        if ("QRCODE".equalsIgnoreCase(paymentMethod) || "MOBILEBANKING".equalsIgnoreCase(paymentMethod)) {
             return new BigDecimal("0.03");
         }
 

@@ -4,6 +4,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import com.actionth.membership.model.Orders;
 import com.actionth.membership.model.dto.OrderUpdateResponse;
 import com.actionth.membership.repository.OrderRepository;
+import com.actionth.membership.service.MPayPaymentService;
 import com.actionth.membership.service.OrderService;
 import com.actionth.membership.service.PaymentGatewayService;
 import com.actionth.membership.service.PaymentWebhookService;
@@ -89,7 +90,8 @@ public class OrderController {
     }
 
     @PostMapping("/update")
-    public ResponseEntity<OrderUpdateResponse> updatePayment(@RequestBody OrderUpdateRequest request) {
+    public ResponseEntity<OrderUpdateResponse> updatePayment(@RequestBody OrderUpdateRequest request,
+            @RequestHeader(value = "User-Agent", required = false) String userAgent) {
         log.info("Received payment update request for orderId: {}", request.getOrderId());
         OrderUpdateResponse response = orderService.updateOrderPayment(request);
 
@@ -120,7 +122,8 @@ public class OrderController {
                         return ResponseEntity.ok(response);
                     }
 
-                    OrderUpdateResponse.PaymentData paymentData = paymentGatewayService.initiatePayment(order);
+                    OrderUpdateResponse.PaymentData paymentData = paymentGatewayService.initiatePayment(
+                            order, request.getBankCode(), MPayPaymentService.isMobileUserAgent(userAgent));
                     response.setPaymentData(paymentData);
                     log.info("Payment initiated successfully for orderId: {}, method: {}", request.getOrderId(), request.getPaymentMethod());
                 }

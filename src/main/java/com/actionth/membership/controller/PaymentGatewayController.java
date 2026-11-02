@@ -1,6 +1,7 @@
 package com.actionth.membership.controller;
 
 import com.actionth.membership.model.dto.VerifyPaymentRequest;
+import com.actionth.membership.service.MPayPaymentService;
 import com.actionth.membership.service.PaymentGatewayService;
 import com.actionth.membership.service.PaymentWebhookService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +21,9 @@ public class PaymentGatewayController {
 
     @Autowired
     private PaymentWebhookService webhookService;
+
+    @Autowired
+    private MPayPaymentService mPayPaymentService;
 
     @PostMapping("/verify-payment")
     public ResponseEntity<Map<String, Object>> verifyPayment(@RequestBody VerifyPaymentRequest request) {
@@ -70,6 +74,15 @@ public class PaymentGatewayController {
             return ResponseEntity.ok(Map.of(
                     "settled", settled,
                     "status", settled ? "SUCCESS" : "PENDING"));
+        }
+
+        // ── mPAY — enquiry by our orderNo (any mPAY method) ──
+        if ("MPAY".equalsIgnoreCase(type)) {
+            String orderNo = request.getOrderNo() != null ? request.getOrderNo() : request.getInvoiceNo();
+            if (orderNo == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MISSING_ORDER_NO");
+            }
+            return ResponseEntity.ok(mPayPaymentService.enquireAndSettle(orderNo.trim()));
         }
 
         // ── Internal: settle from webhook logs ──

@@ -98,6 +98,21 @@ payment:
     secret-key: dummy
     api-url: https://sandbox-pgw.2c2p.com/payment/4.1
 
+# mPAY staging. Set enabled: true once the staging merchant id / channel secret / service ids
+# from mPAY are filled in; the webhook needs a public URL (e.g. an ngrok tunnel to :8080).
+mpay:
+  enabled: false
+  base-url: https://api.stg-paymentgateway.ais.co.th/stg
+  merchant-id: dummy
+  channel-secret: dummy
+  service-id:
+    creditcard: ""
+    qrcode: ""
+    mobilebanking: ""
+    linepay: ""
+    shopeepay: ""
+    paotang: ""
+
 2c2p:
   merchant-id: dummy
   merchant-id-ewallet: dummy

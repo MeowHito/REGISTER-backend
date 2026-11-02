@@ -1,6 +1,7 @@
 package com.actionth.membership.service;
 
 import com.actionth.membership.config.PaymentConfig;
+import com.actionth.membership.constant.PaymentProvider;
 import com.actionth.membership.exception.BusinessException;
 import com.actionth.membership.model.Orders;
 import com.actionth.membership.model.dto.OrderUpdateResponse;
@@ -16,6 +17,7 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -28,6 +30,7 @@ public class PaymentGatewayService {
     private final TwoCTwoPPaymentService twoCTwoPPaymentService;
     private final PaymentConfig paymentConfig;
     private final RedissonClient redissonClient;
+    private final MPayPaymentService mPayPaymentService;
 
     private static final String QR_CACHE_PREFIX = "qr:scb:";
     private static final String QR_LOCK_PREFIX = "qr:scb:lock:";
@@ -36,14 +39,34 @@ public class PaymentGatewayService {
     public PaymentGatewayService(SCBPaymentService scbPaymentService,
             TwoCTwoPPaymentService twoCTwoPPaymentService,
             PaymentConfig paymentConfig,
-            RedissonClient redissonClient) {
+            RedissonClient redissonClient,
+            MPayPaymentService mPayPaymentService) {
         this.scbPaymentService = scbPaymentService;
         this.twoCTwoPPaymentService = twoCTwoPPaymentService;
         this.paymentConfig = paymentConfig;
         this.redissonClient = redissonClient;
+        this.mPayPaymentService = mPayPaymentService;
     }
 
-    public OrderUpdateResponse.PaymentData initiatePayment(Orders order) {
+    /**
+     * Which gateway serves the payment page: "MPAY" once mPAY is switched on, otherwise the
+     * legacy SCB / 2C2P set. The payment page lists exactly these methods.
+     */
+    public Map<String, Object> paymentOptions() {
+        Map<String, Object> options = new LinkedHashMap<>();
+        if (mPayPaymentService.isActive()) {
+            options.put("provider", PaymentProvider.MPAY);
+            options.put("methods", mPayPaymentService.availableMethods());
+            options.put("banks", mPayPaymentService.availableBanks());
+        } else {
+            options.put("provider", "LEGACY");
+            options.put("methods", List.of("qrcode", "creditcard", "ewallet", "alipay", "wechatpay"));
+            options.put("banks", List.of());
+        }
+        return options;
+    }
+
+    public OrderUpdateResponse.PaymentData initiatePayment(Orders order, String bankCode, boolean mobileClient) {
         String paymentMethod = order.getPaymentMethod();
         String orderNo = order.getOrderNo();
         Double totalAmountWithFee = order.getTotalAmountWithFee();
@@ -53,6 +76,15 @@ public class PaymentGatewayService {
                 orderNo, paymentMethod, amount);
 
         try {
+            // Once mPAY is on it replaces SCB and 2C2P for every new payment.
+            if (mPayPaymentService.isActive()) {
+                if (!mPayPaymentService.supports(paymentMethod)) {
+                    log.warn("[InitiatePayment] Method {} not offered through mPAY, orderNo={}", paymentMethod, orderNo);
+                    throw new BusinessException("ช่องทางชำระเงินนี้ยังไม่เปิดให้บริการ");
+                }
+                return mPayPaymentService.initiatePayment(order, bankCode, mobileClient);
+            }
+
             switch (paymentMethod) {
                 case "qrcode":
                     return initiateQRCodePayment(order, orderNo, amount);

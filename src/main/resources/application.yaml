@@ -164,6 +164,24 @@ scb:
   frontend-return-url: ${app.fe-url}/.netlify/functions/return-2c2p
   backend-return-url: ${app.be-url}/api/webhook/partner-2c2p
 
+# mPAY (AIS) — replaces SCB/2C2P for new payments once MPAY_ENABLED=true and the
+# credentials below are set. A channel with a blank service id is not offered.
+mpay:
+  enabled: ${MPAY_ENABLED:false}
+  base-url: ${MPAY_BASE_URL:https://api.stg-paymentgateway.ais.co.th/stg}
+  merchant-id: ${MPAY_MERCHANT_ID:}
+  channel-secret: ${MPAY_CHANNEL_SECRET:}
+  signature-uppercase: ${MPAY_SIGNATURE_UPPERCASE:false}
+  qr-expire-seconds: ${MPAY_QR_EXPIRE_SECONDS:600}
+  banks: ${MPAY_BANKS:002,004,006,011,014,025}
+  service-id:
+    creditcard: ${MPAY_SERVICE_ID_CREDITCARD:}
+    qrcode: ${MPAY_SERVICE_ID_QRCODE:}
+    mobilebanking: ${MPAY_SERVICE_ID_MOBILEBANKING:}
+    linepay: ${MPAY_SERVICE_ID_LINEPAY:}
+    shopeepay: ${MPAY_SERVICE_ID_SHOPEEPAY:}
+    paotang: ${MPAY_SERVICE_ID_PAOTANG:}
+
 jwt:
   secret-key: ${JWT_SECRET_KEY}
 
