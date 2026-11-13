@@ -72,6 +72,7 @@ public class MPayPaymentService {
     private static final int MAX_ATTEMPTS_KEPT = 10;
     private static final int MAX_ENQUIRY_ATTEMPTS = 3;
     private static final String QR_CACHE_PREFIX = "qr:mpay:";
+    private static final String ENQUIRY_PATH = "/service-txn-gateway/v1/enquiry";
     private static final char[] ALNUM = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".toCharArray();
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -315,7 +316,7 @@ public class MPayPaymentService {
         for (String attemptId : attempts.subList(0, Math.min(MAX_ENQUIRY_ATTEMPTS, attempts.size()))) {
             Map<String, Object> response;
             try {
-                response = post("/service-txn-gateway/v1/enquiry", Map.of("order_id", attemptId), orderNo);
+                response = post(ENQUIRY_PATH, Map.of("order_id", attemptId), orderNo);
             } catch (Exception e) {
                 log.warn("[mPAY enquiry] attempt={} failed: {}", attemptId, e.getMessage());
                 continue;
@@ -391,6 +392,12 @@ public class MPayPaymentService {
         } catch (HttpStatusCodeException e) {
             Map<String, Object> err = parse(e.getResponseBodyAsString());
             String errorCode = firstNonBlank(str(err.get("errorCode")), str(err.get("error_code")), e.getStatusCode().toString());
+            if (ENQUIRY_PATH.equals(path) && "TXN_NOT_FOUND".equalsIgnoreCase(errorCode)) {
+                // An attempt mPAY never created (the start request failed). Expected, and the
+                // reconcile job asks every few minutes, so keep it out of the error log.
+                log.info("[mPAY] enquiry orderNo={}: {} not found", orderNo, body.get("order_id"));
+                throw new BusinessException("TXN_NOT_FOUND");
+            }
             log.error("[mPAY] {} orderNo={} failed: http={}, errorCode={}, body={}",
                     path, orderNo, e.getRawStatusCode(), errorCode, e.getResponseBodyAsString());
             appErrorLogService.logBackendError("error", "MPAY_API",

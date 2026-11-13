@@ -48,11 +48,16 @@ public class PublicPaymentController {
      * only the signed webhook or its own enquiry.
      */
     @RequestMapping(value = "/mpay/return", method = { RequestMethod.GET, RequestMethod.POST })
-    public ResponseEntity<Void> mpayReturn(@RequestParam(required = false) String orderNo) {
+    public ResponseEntity<Void> mpayReturn(@RequestParam(required = false) String orderNo,
+                                           @RequestParam(required = false) String result) {
         String base = feUrl.endsWith("/") ? feUrl.substring(0, feUrl.length() - 1) : feUrl;
         String target = base + "/registrationPaymentResult";
         if (orderNo != null && ORDER_NO.matcher(orderNo.trim()).matches()) {
             target += "?invoiceNo=" + URLEncoder.encode(orderNo.trim(), StandardCharsets.UTF_8);
+            // Only a hint for the wording ("cancelled, pay again"); the status still comes from the backend.
+            if ("fail".equalsIgnoreCase(result)) {
+                target += "&mpay=fail";
+            }
         }
         HttpHeaders headers = new HttpHeaders();
         headers.setLocation(URI.create(target));

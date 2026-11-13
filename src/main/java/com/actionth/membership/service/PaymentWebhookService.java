@@ -19,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RBucket;
 import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 import thaibaht.ThaiBaht;
 
 import java.nio.charset.StandardCharsets;
@@ -41,6 +42,7 @@ public class PaymentWebhookService {
     private final ObjectMapper objectMapper;
     private final RedissonClient redissonClient;
     private final DistributedLockService distributedLockService;
+    private final TransactionTemplate transactionTemplate;
 
     public static final String ORDER_PAY_LOCK_PREFIX = "order:pay:";
     private static final String WEBHOOK_DEDUP_PREFIX = "webhook:dedup:";
@@ -545,8 +547,10 @@ public class PaymentWebhookService {
                     return Map.of("ok", true, "status", "PENDING");
                 }
                 try {
-                    Orders refreshed = orderRepository.findByOrderNo(orderNo).orElse(order);
-                    sendSuccessEmail(refreshed, txnId);
+                    // Its own transaction: the reconcile job has no open session, and the email
+                    // reads the order's lazy event / applicants.
+                    transactionTemplate.executeWithoutResult(tx -> orderRepository.findByOrderNo(orderNo)
+                            .ifPresent(refreshed -> sendSuccessEmail(refreshed, txnId)));
                 } catch (Exception ex) {
                     log.error("[mPAY {}] sendSuccessEmail error: {}", source, ex.getMessage());
                 }

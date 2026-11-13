@@ -39,6 +39,11 @@ public interface OrderRepository extends JpaRepository<Orders, Integer>, JpaSpec
 	@Query("SELECT o FROM Orders o WHERE o.paymentStatus = 'PENDING' AND o.paymentDueDatetime < :now")
 	List<Orders> findOverduePayments(OffsetDateTime now);
 
+	// PENDING orders still payable (or only just overdue) — candidates for the mPAY reconcile job
+	@Query("SELECT o.orderNo FROM Orders o WHERE o.paymentStatus = 'PENDING' AND o.active = true " +
+			"AND o.orderNo IS NOT NULL AND (o.paymentDueDatetime IS NULL OR o.paymentDueDatetime > :since)")
+	List<String> findPendingOrderNosDueAfter(@Param("since") OffsetDateTime since);
+
 	// อัปเดตรายการที่เลยกำหนดให้เป็น 'Failed'
 	@Transactional
 	@Modifying

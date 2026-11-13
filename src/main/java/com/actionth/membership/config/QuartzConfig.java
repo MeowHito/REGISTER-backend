@@ -12,6 +12,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import com.actionth.membership.job.ImportEventCalendarJob;
+import com.actionth.membership.job.MPayReconcileJob;
 import com.actionth.membership.job.ProcessEmailQueueJob;
 import com.actionth.membership.job.ResendFailedEmailsJob;
 import com.actionth.membership.job.UpdateOverduePaymentsJob;
@@ -126,6 +127,33 @@ public class QuartzConfig {
                 .forJob(processEmailQueueJobDetail())
                 .withIdentity("processEmailQueueTrigger")
                 .withDescription("Trigger for processing email queue")
+                .withSchedule(CronScheduleBuilder.cronSchedule(cronExpression))
+                .build();
+    }
+
+    /**
+     * JobDetail for settling mPAY payments whose webhook never arrived
+     */
+    @Bean
+    public JobDetail mPayReconcileJobDetail() {
+        return JobBuilder.newJob(MPayReconcileJob.class)
+                .withIdentity("mPayReconcileJob")
+                .withDescription("Enquire mPAY about pending orders and settle the paid ones")
+                .storeDurably()
+                .build();
+    }
+
+    /**
+     * Trigger for the mPAY reconcile job — every 5 minutes (does nothing while mPAY is off)
+     */
+    @Bean
+    public Trigger mPayReconcileTrigger() {
+        String cronExpression = "0 */5 * * * ?";
+
+        return TriggerBuilder.newTrigger()
+                .forJob(mPayReconcileJobDetail())
+                .withIdentity("mPayReconcileTrigger")
+                .withDescription("Trigger for the mPAY reconcile job")
                 .withSchedule(CronScheduleBuilder.cronSchedule(cronExpression))
                 .build();
     }
