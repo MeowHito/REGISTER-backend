@@ -46,7 +46,7 @@ public class ParticipantDTORequest {
 
     private String province;
 
-    @Pattern(regexp = "^(A\\+?|A-|B\\+?|B-|AB\\+?|AB-|O\\+?|O-)$", message = "Invalid blood type")
+    @Pattern(regexp = "^(A\\+?|A-|B\\+?|B-|AB\\+?|AB-|O\\+?|O-|ไม่ระบุ)$", message = "Invalid blood type")
     private String bloodType;
 
     private String healthIssues;
