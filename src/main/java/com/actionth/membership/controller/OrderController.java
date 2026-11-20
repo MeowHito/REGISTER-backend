@@ -3,7 +3,12 @@ package com.actionth.membership.controller;
 import org.springframework.security.access.prepost.PreAuthorize;
 import com.actionth.membership.model.Orders;
 import com.actionth.membership.model.dto.OrderUpdateResponse;
+import com.actionth.membership.model.OrderDetail;
+import com.actionth.membership.repository.OrderDetailRepository;
 import com.actionth.membership.repository.OrderRepository;
+import com.actionth.membership.response.Response;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.security.core.Authentication;
 import com.actionth.membership.service.MPayPaymentService;
 import com.actionth.membership.service.OrderService;
 import com.actionth.membership.service.PaymentGatewayService;
@@ -43,6 +48,49 @@ public class OrderController {
 
     @Autowired
     private OrderRepository orderRepository;
+
+    @Autowired
+    private OrderDetailRepository orderDetailRepository;
+
+    /**
+     * Personal details from the signed-in runner's latest "register for myself" entry, so the
+     * registration page can fill in what their profile doesn't have (ID number, emergency
+     * contact…). Only ever returns the caller's own data; null when they have none.
+     */
+    @GetMapping("/my-last-self")
+    public Response<Map<String, Object>> myLastSelfEntry(Authentication authentication) {
+        Integer userId;
+        try {
+            userId = Integer.valueOf(authentication.getName());
+        } catch (Exception e) {
+            return new Response<>(null, "Unauthorized", false);
+        }
+        List<OrderDetail> rows = orderDetailRepository.findSelfEntriesByUser(userId, PageRequest.of(0, 1));
+        if (rows.isEmpty()) {
+            return new Response<>(null, "No previous entry", true);
+        }
+        OrderDetail od = rows.get(0);
+        Map<String, Object> out = new HashMap<>();
+        out.put("firstName", od.getFirstName());
+        out.put("lastName", od.getLastName());
+        out.put("firstNameEn", od.getFirstNameEn());
+        out.put("lastNameEn", od.getLastNameEn());
+        out.put("gender", od.getGender());
+        out.put("birthDate", od.getBirthDate());
+        out.put("phone", od.getPhone());
+        out.put("phoneCountryCode", od.getPhoneCountryCode());
+        out.put("nationality", od.getNationality());
+        out.put("idNo", od.getIdNo());
+        out.put("healthIssues", od.getHealthIssues());
+        out.put("bloodType", od.getBloodType());
+        out.put("emergencyContact", od.getEmergencyContact());
+        out.put("emergencyRelation", od.getEmergencyRelation());
+        out.put("emergencyPhone", od.getEmergencyPhone());
+        out.put("emergencyPhoneCountryCode", od.getEmergencyPhoneCountryCode());
+        out.put("teamClub", od.getTeamClub());
+        out.put("province", od.getProvince());
+        return new Response<>(out, "OK", true);
+    }
 
     @PostMapping("/create")
     public ResponseEntity<OrderDto> createOrder(@RequestBody OrderRequest orderRequest) {

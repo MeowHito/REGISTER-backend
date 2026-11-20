@@ -1491,7 +1491,8 @@ public class EventServiceImpl implements EventService {
 					.totalQuota(totalQuota)
 					.availableQuota(availableQuota != null ? Math.max(availableQuota, 0) : null)
 					.registeredCount(registeredCount.intValue())
-					.isAvailable(availableQuota != null && availableQuota > 0)
+					// No quota set on the distance means no limit, not "sold out".
+					.isAvailable(availableQuota == null || availableQuota > 0)
 					.currentPrice(currentPrice)
 					.paymentName(paymentName)
 					.isSpecialPrice(isSpecialPrice)

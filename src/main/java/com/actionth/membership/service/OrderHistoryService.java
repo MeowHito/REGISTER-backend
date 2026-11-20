@@ -57,12 +57,22 @@ public class OrderHistoryService {
     private final UserService userService;
     private final EventAccessService eventAccessService;
 
+    private static String joinName(String first, String last) {
+        String n = ((first == null ? "" : first) + " " + (last == null ? "" : last)).trim();
+        return n.isEmpty() ? null : n;
+    }
+
     private boolean isOwner(Orders order, Integer userId) {
         return userId != null && order.getCreatedBy() != null && userId.equals(order.getCreatedBy().getId());
     }
 
     public Page<OrderHistoryResponse> search(String q, String status,
             OffsetDateTime start, OffsetDateTime end, PagingData pagingData) {
+        return search(q, status, start, end, null, pagingData);
+    }
+
+    public Page<OrderHistoryResponse> search(String q, String status,
+            OffsetDateTime start, OffsetDateTime end, String eventId, PagingData pagingData) {
 
         User user = userService.getCurrentUserSession();
 
@@ -114,11 +124,28 @@ public class OrderHistoryService {
                 Predicate byOrderNo = cb.like(cb.lower(root.get("orderNo")), keyword);
                 Predicate byEventName = cb.like(cb.lower(event.get("name")), keyword);
 
-                predicates.add(cb.or(byOrderNo, byEventName));
+                // …or anyone on the order: Thai/English name, email or phone (EXISTS keeps one row per order).
+                Subquery<Integer> applicantSub = query.subquery(Integer.class);
+                Root<OrderDetail> od = applicantSub.from(OrderDetail.class);
+                applicantSub.select(od.get("id")).where(
+                        cb.equal(od.get("order"), root),
+                        cb.or(
+                                cb.like(cb.lower(cb.concat(cb.concat(cb.coalesce(od.get("firstName"), ""), " "),
+                                        cb.coalesce(od.get("lastName"), ""))), keyword),
+                                cb.like(cb.lower(cb.concat(cb.concat(cb.coalesce(od.get("firstNameEn"), ""), " "),
+                                        cb.coalesce(od.get("lastNameEn"), ""))), keyword),
+                                cb.like(cb.lower(od.get("email")), keyword),
+                                cb.like(od.get("phone"), keyword)));
+
+                predicates.add(cb.or(byOrderNo, byEventName, cb.exists(applicantSub)));
             }
 
             if (status != null && !status.isBlank()) {
                 predicates.add(cb.equal(root.get("paymentStatus"), status));
+            }
+
+            if (eventId != null && !eventId.isBlank()) {
+                predicates.add(cb.equal(event.get("uuid"), eventId));
             }
 
             if (start != null) {
@@ -142,6 +169,28 @@ public class OrderHistoryService {
             dto.setEventDate(order.getEvent() != null ? order.getEvent().getEventDate() : null);
             dto.setAmount(order.getTotalPrice());
             dto.setReviewReason(order.getReviewReason());
+            dto.setPaymentMethod(order.getPaymentMethod());
+            dto.setPaymentDateTime(order.getPaymentDateTime());
+            dto.setPaymentDueDatetime(order.getPaymentDueDatetime());
+            User buyer = order.getCreatedBy();
+            if (buyer != null) {
+                String name = ((buyer.getFirstName() == null ? "" : buyer.getFirstName()) + " "
+                        + (buyer.getLastName() == null ? "" : buyer.getLastName())).trim();
+                dto.setBuyerName(name.isEmpty() ? null : name);
+                dto.setBuyerEmail(buyer.getEmail());
+            }
+            dto.setApplicants(order.getOrderDetails() == null ? List.of() : order.getOrderDetails().stream()
+                    .map(d -> {
+                        OrderHistoryResponse.Applicant a = new OrderHistoryResponse.Applicant();
+                        a.setName(joinName(d.getFirstName(), d.getLastName()));
+                        a.setNameEn(joinName(d.getFirstNameEn(), d.getLastNameEn()));
+                        a.setEventTypeName(d.getEventType() != null ? d.getEventType().getName() : null);
+                        a.setBibNo(d.getBibNo());
+                        a.setPhone(d.getPhone());
+                        a.setIsSelf(d.getIsSelf());
+                        return a;
+                    })
+                    .toList());
             return dto;
         });
     }

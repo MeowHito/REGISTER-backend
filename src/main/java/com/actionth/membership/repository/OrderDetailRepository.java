@@ -45,6 +45,14 @@ public interface OrderDetailRepository
 			""", nativeQuery = true)
 	Long countByEventTypeIdWithExpiredOrNullPricing(@Param("eventTypeId") Integer eventTypeId);
 
+	/** The signed-in runner's own entries ("register for myself"), newest first. */
+	@Query("""
+			SELECT od FROM OrderDetail od JOIN od.order o
+			WHERE o.createdBy.id = :userId AND od.isSelf = true
+			ORDER BY od.id DESC
+			""")
+	List<OrderDetail> findSelfEntriesByUser(@Param("userId") Integer userId, Pageable pageable);
+
 	@Query("""
 			SELECT COUNT(od)
 			FROM OrderDetail od

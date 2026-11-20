@@ -40,12 +40,13 @@ public class OrderHistoryController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime endDate,
+            @RequestParam(required = false) String eventId,
             @RequestParam(value = "paging", required = false) String pagingJson) throws JsonProcessingException {
         PagingData paging = null;
         if (pagingJson != null) {
             paging = mapper.readValue(pagingJson, PagingData.class);
         }
-        return new Response<>(orderHistoryService.search(q, status, startDate, endDate, paging),
+        return new Response<>(orderHistoryService.search(q, status, startDate, endDate, eventId, paging),
                 "Order History retrieved successfully", true);
     }
 

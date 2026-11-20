@@ -10,6 +10,15 @@ public class OrderItemResponse {
     private String id;
     private String firstName;
     private String lastName;
+    private String firstNameEn;
+    private String lastNameEn;
+    /** false when the buyer registered this person for someone else. */
+    private Boolean isSelf;
+    private String bloodType;
+    private String healthIssues;
+    private String emergencyContact;
+    private String emergencyRelation;
+    private String emergencyPhone;
     private String email;
     private String phone;
     private String phoneCountryCode;
