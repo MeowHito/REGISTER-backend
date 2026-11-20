@@ -28,6 +28,8 @@ public class EventViewDto {
     private OffsetDateTime endRegistrationDate;
     private Boolean isDraft;
     private String eventStatus;
+    /** Names of the race distances on sale (active event types), for the chips on the event card. */
+    private java.util.List<String> distances;
     private String organizerId;
     private EventPermissionSummaryDto permission;
 }

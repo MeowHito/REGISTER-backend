@@ -1007,6 +1007,14 @@ public class EventServiceImpl implements EventService {
 
 	private EventViewDto mapViewEventToDto(Event event, Integer createdBy) {
 		EventViewDto eventMapper = modelMapper.map(event, EventViewDto.class);
+		// eventTypes is already loaded eagerly with the event, so this adds no query.
+		eventMapper.setDistances(event.getEventTypes() == null ? List.of()
+				: event.getEventTypes().stream()
+						.filter(et -> !Boolean.FALSE.equals(et.getActive()) && et.getName() != null
+								&& !et.getName().isBlank())
+						.map(et -> et.getName().trim())
+						.distinct()
+						.toList());
 
 		ZonedDateTime now = ZonedDateTime.now(ZoneId.of("Asia/Bangkok"));
 
