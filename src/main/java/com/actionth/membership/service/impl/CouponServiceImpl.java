@@ -532,7 +532,7 @@ public class CouponServiceImpl implements CouponService {
 
         if (coupons == null || coupons.isEmpty()) {
             response.put("status", "error");
-            response.put("message", "Coupon not found or already redeemed.");
+            response.put("message", "ไม่พบคูปองนี้ หรือคูปองถูกใช้ไปแล้ว");
             response.put("idNo", idNoValidity);
             return response;
         }

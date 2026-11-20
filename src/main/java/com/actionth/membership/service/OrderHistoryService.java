@@ -260,6 +260,8 @@ public class OrderHistoryService {
         response.setReviewReason(order.getReviewReason());
         response.setAddOnTotal(order.getAddOnTotal());
         response.setTestMode(order.getEvent() != null && Boolean.TRUE.equals(order.getEvent().getTestMode()));
+        response.setConfirmationEmail(fullAccess && order.getCreatedBy() != null
+                ? order.getCreatedBy().getEmail() : null);
         response.setAddOns(order.getOrderAddOns().stream()
                 .map(AddOnUtils::toDto)
                 .toList());

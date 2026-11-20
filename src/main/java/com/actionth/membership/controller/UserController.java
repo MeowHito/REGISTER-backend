@@ -93,16 +93,20 @@ public class UserController {
         return new Response<>(null, "Updated", true);
     }
 
+    // User lists carry e-mail, birth date and gender: admin only (organizer picker, approver transfer).
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/getOrganizerActive")
     public Response<List<UserViewDto>> getOrganizerActive() {
         return new Response<>(userService.getUserActiveByRole("organizer"), "Users retrieved successfully", true);
     }
     
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/getUserActiveByRole")
     public Response<List<UserViewDto>> getUserActiveByRole(@RequestParam(value = "role") String role) {
         return new Response<>(userService.getUserActiveByRole(role), "Users retrieved successfully", true);
     }
     
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/getUserActiveByRoleType")
     public Response<List<UserViewDto>> getUserActiveByRoleType(@RequestParam(value = "role") String role) {
         return new Response<>(userService.getUserActiveByRoleType(role), "Users retrieved successfully", true);

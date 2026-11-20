@@ -35,9 +35,12 @@ public class PublicParticipantController {
     @GetMapping("/checkName")
     public Response<List<ParticipantViewDto>> checkName(@RequestParam("eventId") String eventId,
             @RequestParam("name") String name) {
-        return new Response<>(participantService.checkParticipantName(eventId, name),
-                "Participants retrieved successfully",
-                true);
+        if (!checklistOpen(eventId)) {
+            return new Response<>(List.of(), CHECKLIST_CLOSED, false);
+        }
+        List<ParticipantViewDto> rows = participantService.checkParticipantName(eventId, name);
+        rows.forEach(PublicParticipantController::stripPrivate);
+        return new Response<>(rows, "Participants retrieved successfully", true);
     }
 
     @GetMapping("/check")
@@ -45,9 +48,29 @@ public class PublicParticipantController {
             @RequestParam("name") String name,
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "size", defaultValue = "20") int size) {
-        return new Response<>(participantService.checkParticipant(eventId, name, page, size),
-                "Participants retrieved successfully",
-                true);
+        if (!checklistOpen(eventId)) {
+            return new Response<>(Page.empty(), CHECKLIST_CLOSED, false);
+        }
+        Page<ParticipantViewDto> rows = participantService.checkParticipant(eventId, name, page, size);
+        rows.forEach(PublicParticipantController::stripPrivate);
+        return new Response<>(rows, "Participants retrieved successfully", true);
+    }
+
+    private static final String CHECKLIST_CLOSED = "งานนี้ไม่ได้เปิดให้ตรวจสอบรายชื่อ";
+
+    /** The public name search only works while the organizer has "show checklist" switched on. */
+    private boolean checklistOpen(String eventKey) {
+        if (eventKey == null || eventKey.isBlank()) {
+            return false;
+        }
+        return eventRepository.findByLinkOrUuid(eventKey.trim())
+                .map(e -> Boolean.TRUE.equals(e.getShowChecklist()))
+                .orElse(false);
+    }
+
+    /** Anyone can search by name, so never hand out a runner's birth date here. */
+    private static void stripPrivate(ParticipantViewDto dto) {
+        dto.setBirthDate(null);
     }
 
     @GetMapping("/resolve")

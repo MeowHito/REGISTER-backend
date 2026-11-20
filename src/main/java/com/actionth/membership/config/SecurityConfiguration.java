@@ -58,6 +58,9 @@ public class SecurityConfiguration {
 			"/public-api/**",
 			"/login",
 			"/actuator/health",
+			// "who am I" probe: anonymous callers get success=false from the controller instead of a
+			// 403 that shows up as a red error in every visitor's browser console
+			"/api/auth/me",
 			"/api/order/validate-token/**",
 			"/api/orderHistory/detail/**",
 			"/api/coupon/validateCoupon",

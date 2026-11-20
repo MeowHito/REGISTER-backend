@@ -29,4 +29,6 @@ public class OrderDetailFullResponse {
     private List<OrderAddOnDto> addOns;
     private Double addOnTotal;
     private Boolean testMode;
+    /** Where the confirmation email went (the buyer); only on full access, never to a read-only organizer. */
+    private String confirmationEmail;
 }

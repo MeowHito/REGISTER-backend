@@ -184,7 +184,7 @@ public class UserServiceImpl implements UserService {
     @Override
     public UserDto createUser(UserRegisterDTORequest userDto) {
         if (userRepository.existsByEmail(userDto.getEmail())) {
-            throw new ValidationException("Email is already taken");
+            throw new ValidationException("อีเมลนี้มีบัญชีอยู่แล้ว กรุณาเข้าสู่ระบบ หรือกด \"ลืมรหัสผ่าน\"");
         }
         User user = modelMapper.map(userDto, User.class);
 

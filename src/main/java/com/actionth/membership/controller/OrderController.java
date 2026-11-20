@@ -129,7 +129,9 @@ public class OrderController {
                 }
             } catch (Exception e) {
                 log.error("Failed to initiate payment for orderId={}: {}", request.getOrderId(), e.getMessage(), e);
-                response.setMessage("Order updated but payment initiation failed: " + e.getMessage());
+                // A stable code, not e.getMessage(): the browser shows a Thai message for it and
+                // gateway internals stay in the log.
+                response.setMessage("PAYMENT_INIT_FAILED");
             }
         }
 
