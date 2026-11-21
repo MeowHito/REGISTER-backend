@@ -12,4 +12,5 @@ import lombok.NoArgsConstructor;
 public class EventConditionDto {
     private String id;
     private String description;
+    private String detail;
 }

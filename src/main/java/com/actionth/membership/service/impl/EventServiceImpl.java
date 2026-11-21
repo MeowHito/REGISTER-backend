@@ -738,6 +738,7 @@ public class EventServiceImpl implements EventService {
 		mergeChild(entity.getEventConditions(), dto.getEventConditions(), (dtoC, existingMap) -> {
 			EventCondition c = existingMap.getOrDefault(dtoC.getId(), new EventCondition());
 			c.setDescription(dtoC.getDescription());
+			c.setDetail(dtoC.getDetail());
 			c.setEvent(entity);
 			return c;
 		});
@@ -1110,6 +1111,7 @@ public class EventServiceImpl implements EventService {
 						.map(ec -> EventConditionDto.builder()
 								.id(ec.getUuid())
 								.description(ec.getDescription())
+								.detail(ec.getDetail())
 								.build())
 						.toList())
 

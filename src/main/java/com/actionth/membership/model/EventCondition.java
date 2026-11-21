@@ -34,4 +34,8 @@ public class EventCondition extends StandardFields {
     private Event event;
 
     private String description;
+
+    /** Long text shown in a popup when the runner taps the {braced} part of the description. */
+    @Column(columnDefinition = "TEXT")
+    private String detail;
 }
