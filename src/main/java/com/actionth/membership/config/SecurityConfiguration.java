@@ -181,6 +181,11 @@ public class SecurityConfiguration {
 				"Authorization", "Content-Type", "Cache-Control",
 				"Origin", "Accept", "X-Requested-With"));
 
+		// The site and the API are different origins, so every JSON POST is preceded by an OPTIONS
+		// preflight. Without Access-Control-Max-Age the browser re-asks after 5 seconds; let it reuse
+		// the answer for an hour (Chrome caps it at 2 hours).
+		cfg.setMaxAge(3600L);
+
 		UrlBasedCorsConfigurationSource src = new UrlBasedCorsConfigurationSource();
 		src.registerCorsConfiguration("/**", cfg);
 		return src;

@@ -308,6 +308,11 @@ public class OrderHistoryService {
         response.setOwnerUuid(order.getCreatedBy() != null ? order.getCreatedBy().getUuid() : null);
         response.setReviewReason(order.getReviewReason());
         response.setAddOnTotal(order.getAddOnTotal());
+        response.setTotalPrice(order.getTotalPrice());
+        response.setCouponDiscount(order.getCouponDiscount());
+        response.setFeePercent(order.getFeePercent());
+        response.setFee(order.getFee());
+        response.setTotalAmountWithFee(order.getTotalAmountWithFee());
         response.setTestMode(order.getEvent() != null && Boolean.TRUE.equals(order.getEvent().getTestMode()));
         response.setConfirmationEmail(fullAccess && order.getCreatedBy() != null
                 ? order.getCreatedBy().getEmail() : null);

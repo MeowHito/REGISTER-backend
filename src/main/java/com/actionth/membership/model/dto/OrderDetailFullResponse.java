@@ -28,6 +28,12 @@ public class OrderDetailFullResponse {
     private String reviewReason;
     private List<OrderAddOnDto> addOns;
     private Double addOnTotal;
+    /** Money snapshot of the order, so the history page shows what was actually charged. */
+    private Double totalPrice;
+    private Double couponDiscount;
+    private Double feePercent;
+    private Double fee;
+    private Double totalAmountWithFee;
     private Boolean testMode;
     /** Where the confirmation email went (the buyer); only on full access, never to a read-only organizer. */
     private String confirmationEmail;
