@@ -204,10 +204,6 @@ public class OrderServiceImpl implements OrderService {
                     OrderDetailRequest req = orderRequest.getOrderDetails().get(i);
                     OrderDetail orderDetail = modelMapper.map(req, OrderDetail.class);
                     
-                    if (req.getBirthDate() != null) {
-                        orderDetail.setAge(AgeGroupUtils.calculateAge(req.getBirthDate()));
-                    }
-                    
                     if (req.getEventTypeId() != null) {
                         final int detailIndex = i;
                         EventType eventType = eventTypeRepository.findByUuid(req.getEventTypeId())
@@ -239,6 +235,11 @@ public class OrderServiceImpl implements OrderService {
                         orderDetail.setShirtSize(shirtSize);
                     }
                     attachExtraShirts(orderDetail, req, event);
+                    if (req.getBirthDate() != null) {
+                        // the event's rule, measured against the distance's race day
+                        orderDetail.setAge(AgeGroupUtils.raceAge(req.getBirthDate(), event,
+                                orderDetail.getEventType(), OffsetDateTime.now()));
+                    }
                     if (req.getPricingId() != null) {
                         final int detailIndex = i;
                         Pricing pricing = pricingRepository.findByUuid(req.getPricingId())

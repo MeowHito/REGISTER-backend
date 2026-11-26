@@ -1,11 +1,14 @@
 package com.actionth.membership.service;
 
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionTemplate;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -57,8 +60,15 @@ class MPayPaymentTest {
         when(lock.executeWithLock(anyString(), any(Supplier.class)))
                 .thenAnswer(inv -> ((Supplier<?>) inv.getArgument(1)).get());
 
+        // Runs the success e-mail callback inline, like a real transaction would.
+        TransactionTemplate tx = mock(TransactionTemplate.class);
+        doAnswer(inv -> {
+            ((java.util.function.Consumer<TransactionStatus>) inv.getArgument(0)).accept(mock(TransactionStatus.class));
+            return null;
+        }).when(tx).executeWithoutResult(any());
+
         webhook = new PaymentWebhookService(mock(PaymentWebhookLogRepository.class), orderRepository, orderService,
-                mock(EmailService.class), mock(AWSService.class), new ObjectMapper(), redisson, lock);
+                mock(EmailService.class), mock(AWSService.class), new ObjectMapper(), redisson, lock, tx);
         mPay = new MPayPaymentService(config, new ObjectMapper(), redisson, mock(AppErrorLogService.class), webhook);
 
         order = new Orders();

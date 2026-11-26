@@ -1,5 +1,7 @@
 package com.actionth.membership.service.impl;
 
+import com.actionth.membership.utils.AgeGroupUtils;
+
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.Authentication;
 import java.time.OffsetDateTime;
@@ -707,6 +709,7 @@ public class EventServiceImpl implements EventService {
 		}
 		entity.setFieldConfig(writeFieldConfig(dto.getFieldConfig()));
 		entity.setPdpaConsentEnabled(Boolean.TRUE.equals(dto.getPdpaConsentEnabled()));
+		entity.setAgeCalcMethod(AgeGroupUtils.normalizeAgeCalcMethod(dto.getAgeCalcMethod()));
 
 		if (dto.getProvinceId() != null) {
 			CountryState countryState = eventRepository.findCountryStateByUuid(dto.getProvinceId())
@@ -1105,6 +1108,7 @@ public class EventServiceImpl implements EventService {
 				.showChecklist(event.getShowChecklist())
 				.testMode(Boolean.TRUE.equals(event.getTestMode()))
 				.pdpaConsentEnabled(Boolean.TRUE.equals(event.getPdpaConsentEnabled()))
+				.ageCalcMethod(event.getAgeCalcMethod())
 				.fieldConfig(readFieldConfig(event.getFieldConfig()))
 				.questionSections(mapQuestionSections(event))
 				.eventConditions(event.getEventConditions().stream()

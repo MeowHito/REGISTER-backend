@@ -853,9 +853,12 @@ public class ParticipantServiceImpl implements ParticipantService {
         if (!Objects.equals(oldBirth, newBirth)) {
             track(changes, "birthDate", oldBirth, newBirth);
             participant.setBirthDate(req.getBirthDate());
-            // Same rule as at registration: age in the year the runner signed up.
+            // Same rule as at registration (the event's age method; the original rule counts
+            // from the year the runner signed up).
             participant.setAge(req.getBirthDate() == null ? null
-                    : AgeGroupUtils.calculateAgeAtRefDate(req.getBirthDate(), participant.getCreatedTime()));
+                    : AgeGroupUtils.raceAge(req.getBirthDate(),
+                            participant.getOrder() != null ? participant.getOrder().getEvent() : null,
+                            participant.getEventType(), participant.getCreatedTime()));
         }
 
         track(changes, "nationality", participant.getNationality(), req.getNationality());

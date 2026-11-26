@@ -49,6 +49,8 @@ public class EventDto {
     private Boolean showChecklist;
     private Boolean testMode;
     private Boolean pdpaConsentEnabled;
+    /** BIRTH_YEAR / EXACT_DATE, or null for the original registration-year rule. */
+    private String ageCalcMethod;
 
     private List<EventConditionDto> eventConditions;
     private List<EventDetailDto> eventDetails;

@@ -1,10 +1,12 @@
 package com.actionth.membership.utils;
 
 import com.actionth.membership.model.AgeGroup;
+import com.actionth.membership.model.Event;
 import com.actionth.membership.model.EventType;
 import com.actionth.membership.model.OrderDetail;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.Period;
 import java.util.List;
@@ -104,6 +106,43 @@ public class AgeGroupUtils {
 
         log.debug("[AgeGroup formatAgeGroup] Output - {}", result);
         return result;
+    }
+
+    public static final String AGE_BIRTH_YEAR = "BIRTH_YEAR";
+    public static final String AGE_EXACT_DATE = "EXACT_DATE";
+
+    /** Only the two known methods are stored; anything else means "the original rule" (null). */
+    public static String normalizeAgeCalcMethod(String method) {
+        if (method == null) return null;
+        String m = method.trim().toUpperCase();
+        return AGE_BIRTH_YEAR.equals(m) || AGE_EXACT_DATE.equals(m) ? m : null;
+    }
+
+    /**
+     * A runner's race age under the event's {@code ageCalcMethod}, mirrored by the registration
+     * page's {@code raceAge} in StreamlinedRegistration/utils.js:
+     * <ul>
+     *   <li>{@code BIRTH_YEAR}: race year minus birth year</li>
+     *   <li>{@code EXACT_DATE}: completed years on race day</li>
+     *   <li>null (events from before the option): {@code legacyRef}'s year minus birth year</li>
+     * </ul>
+     * Race day is the distance's own date, else the event's, else today. Dates are read in Bangkok time.
+     */
+    public static int raceAge(OffsetDateTime birthDate, Event event, EventType eventType, OffsetDateTime legacyRef) {
+        if (birthDate == null) return 0;
+        LocalDate birth = birthDate.atZoneSameInstant(ExportDateTimeUtils.BANGKOK_ZONE).toLocalDate();
+        String method = event != null ? normalizeAgeCalcMethod(event.getAgeCalcMethod()) : null;
+        if (method == null) {
+            OffsetDateTime ref = legacyRef != null ? legacyRef : OffsetDateTime.now();
+            return ref.atZoneSameInstant(ExportDateTimeUtils.BANGKOK_ZONE).getYear() - birth.getYear();
+        }
+        OffsetDateTime raceDay = eventType != null && eventType.getEventDate() != null ? eventType.getEventDate()
+                : event.getEventDate() != null ? event.getEventDate() : OffsetDateTime.now();
+        LocalDate race = raceDay.atZoneSameInstant(ExportDateTimeUtils.BANGKOK_ZONE).toLocalDate();
+        if (AGE_EXACT_DATE.equals(method)) {
+            return Math.max(0, Period.between(birth, race).getYears());
+        }
+        return race.getYear() - birth.getYear();
     }
 
     /**

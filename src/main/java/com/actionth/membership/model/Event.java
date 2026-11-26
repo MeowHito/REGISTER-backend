@@ -85,6 +85,15 @@ public class Event extends StandardFields {
     private Boolean pdpaConsentEnabled;
 
     /**
+     * How a runner's race age (age groups, the age stored on the order) is worked out:
+     * {@code BIRTH_YEAR} = race year minus birth year, {@code EXACT_DATE} = full years on race day.
+     * Null keeps the original rule (registration year minus birth year), so events created before
+     * the option existed don't change age mid-sale. See {@code AgeGroupUtils.raceAge}.
+     */
+    @Column(length = 20)
+    private String ageCalcMethod;
+
+    /**
      * Which registration-form fields this event asks for, as JSON {@code {"idNo":"REQUIRED",
      * "bloodType":"HIDDEN", ...}} (values HIDDEN / OPTIONAL / REQUIRED). Missing keys fall back
      * to the platform default; name, birth date, gender and email can never be turned off.
